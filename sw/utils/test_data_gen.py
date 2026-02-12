@@ -3,7 +3,7 @@ from typing import Optional, Sequence, Tuple, Union
 from .Decoder import FP8_Codec
 from .Multiplier import Multiplier
 from .Adder import Adder
-
+from typing import Optional, Dict, Any, Sequence
 
 SeedType = Optional[Union[int, Tuple[int, int]]]
 
@@ -16,7 +16,12 @@ class Data_Gen:
     reference product. Matrices are plain float arrays (not FP8-encoded).
     """
 
-    def __init__(self, row: int, col: int, format: str = 'e4m3', value_range: Sequence[float] = (1.0, 2.0)) -> None:
+    def __init__(self, row: int, col: int, 
+                 format: str = 'e4m3',
+                 dist = 'uniform',
+                 value_range: Sequence[float] = (1.0, 2.0), 
+                 dist_params: Optional[Dict[str, Any]] = None
+            ) -> None:
         """
         Initialize the data generator.
 
@@ -41,6 +46,8 @@ class Data_Gen:
         self.vmin: float = vmin
         self.vmax: float = vmax
         self.format = format
+        self.dist = dist
+        self.dist_params: Dict[str, Any] = dist_params or {}
         self.adder = Adder(format=format)
         self.multiplier = Multiplier(format=format, bin_output=True)
 
@@ -63,7 +70,29 @@ class Data_Gen:
         Returns:
             A NumPy array of shape (row, col), dtype=float64 by default.
         """
-        return rng.uniform(self.vmin, self.vmax, size=(self.row, self.col))
+        if self.dist == "uniform":
+            return rng.uniform(self.vmin, self.vmax, size=(self.row, self.col))
+
+        if self.dist in ("normal", "gaussian", "bell"):
+            # bell-shaped: Normal distribution
+            mu = self.dist_params.get("mean", (self.vmin + self.vmax) / 2.0)
+            sigma = self.dist_params.get("std", (self.vmax - self.vmin) / 6.0)
+            return rng.normal(loc=mu, scale=sigma, size=(self.row, self.col))
+
+        if self.dist in ("laplace", "heavy", "heavy_tail"):
+            # heavy tails: Laplace distribution (fatter than normal)
+            mu = self.dist_params.get("mean", (self.vmin + self.vmax) / 2.0)
+            b = self.dist_params.get("scale", (self.vmax - self.vmin) / 6.0)
+            return rng.laplace(loc=mu, scale=b, size=(self.row, self.col))
+
+        if self.dist in ("student_t", "t"):
+            # heavy tails: Student's t
+            df = self.dist_params.get("df", 3)
+            mu = self.dist_params.get("mean", (self.vmin + self.vmax) / 2.0)
+            scale = self.dist_params.get("scale", (self.vmax - self.vmin) / 6.0)
+            return rng.standard_t(df, size=(self.row, self.col)) * scale + mu
+
+        raise ValueError(f"Unsupported dist '{self.dist}'.")
     
     def mac_unit(self, value_a: str, value_b: str, prod_t_1: str) -> str:
         prod_t = self.multiplier.multiply(value_a, value_b)

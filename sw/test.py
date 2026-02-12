@@ -95,10 +95,36 @@ def add_mul_test(format: str = 'e3m4'):
                 r_val = FP8_Codec.decode(int(res_bin, 2), format)[0]
                 print(f"    Decimal: {b_val} x {c_val} = {r_val}\n")
 
+def data_gen_test():
+    np.set_printoptions(precision=6, suppress=True)
+
+    demos = [
+        ("uniform", Data_Gen(row=3, col=3, value_range=(1.0, 2.0), dist="uniform")),
+        ("normal", Data_Gen(row=3, col=3, value_range=(1.0, 2.0), dist="normal")),
+        ("laplace", Data_Gen(row=3, col=3, value_range=(1.0, 2.0), dist="laplace")),
+        ("student_t", Data_Gen(row=3, col=3, value_range=(1.0, 2.0), dist="student_t", dist_params={"df": 3})),
+    ]
+    for name, generator in demos:
+        print(f"\n===== Testing {name} distribution =====")
+
+        mat_a, mat_b, mat_fp8 = generator.fasa_test_data(seed=42)
+
+        mat_ref = mat_a @ mat_b   # numpy float64 GEMM
+
+        abs_err = np.abs(mat_fp8 - mat_ref)
+        rel_err = abs_err / (np.abs(mat_ref) + 1e-12)
+
+        print("Reference:\n", mat_ref)
+        print("FP8 Result:\n", mat_fp8)
+        print("Mean Absolute Error:", np.mean(abs_err))
+        print("Max Absolute Error:", np.max(abs_err))
+        print("Mean Relative Error:", np.mean(rel_err))
+
 if __name__ == "__main__":
     # format = 'e3m4'
     # mac_test(format)
     # adder_test(format)
     # add_mul_test(format)
-    for fmt in ['e2m5', 'e3m4', 'e4m3', 'e5m2']:
-         mac_test(format=fmt)
+    # for fmt in ['e2m5', 'e3m4', 'e4m3', 'e5m2']:
+    #      mac_test(format=fmt)
+    data_gen_test()
