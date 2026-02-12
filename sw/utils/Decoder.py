@@ -1,7 +1,7 @@
 import numpy as np
 import math
 
-class FP8_Codec:
+class FP8Codec:
     """
     FP8 format converter for encoding and decoding between floating-point numbers and FP8 representations.
     Supports formats: 'e2m5', 'e3m4', 'e4m3', 'e5m2'
@@ -26,10 +26,10 @@ class FP8_Codec:
         Returns:
             tuple: (exponent_bits, mantissa_bits, bias)
         """
-        if fp_format not in FP8_Codec.FORMATS:
-            raise ValueError(f'Unsupported format "{fp_format}". Choose from {list(FP8_Codec.FORMATS.keys())}')
+        if fp_format not in FP8Codec.FORMATS:
+            raise ValueError(f'Unsupported format "{fp_format}". Choose from {list(FP8Codec.FORMATS.keys())}')
         
-        e_bits, m_bits = FP8_Codec.FORMATS[fp_format]
+        e_bits, m_bits = FP8Codec.FORMATS[fp_format]
         bias = (2 ** (e_bits - 1) - 1)
         return e_bits, m_bits, bias
     
@@ -54,7 +54,7 @@ class FP8_Codec:
         if not (0 <= input_data <= 0xFF):
             raise ValueError("input_data must be an 8-bit integer in range 0..255")
 
-        e_bits, m_bits, default_bias = FP8_Codec._get_format_params(fp_format)
+        e_bits, m_bits, default_bias = FP8Codec._get_format_params(fp_format)
         bias = default_bias if custom_bias is None else int(custom_bias)
         mant_scale = 1 << m_bits
         exp_all_ones = (1 << e_bits) - 1
@@ -116,7 +116,7 @@ class FP8_Codec:
         Returns:
             str: 8-bit binary string representation
         """
-        e_bits, m_bits, bias = FP8_Codec._get_format_params(fp_format)
+        e_bits, m_bits, bias = FP8Codec._get_format_params(fp_format)
         total_bits = 1 + e_bits + m_bits
         max_exp = (1 << e_bits) - 1
 
@@ -196,7 +196,7 @@ class FP8_Codec:
         Returns:
             int: 8-bit integer representation (0-255)
         """
-        binary_str = FP8_Codec.encode(decimal_number, fp_format)
+        binary_str = FP8Codec.encode(decimal_number, fp_format)
         return int(binary_str, 2)
     
     @staticmethod
@@ -215,7 +215,7 @@ class FP8_Codec:
                 - 若为 None，则仅打印所有格式的范围信息。
         """
         def compute_range(fmt: str):
-            e_bits, m_bits, bias = FP8_Codec._get_format_params(fmt)
+            e_bits, m_bits, bias = FP8Codec._get_format_params(fmt)
             mant_scale = 1 << m_bits
             exp_all_ones = (1 << e_bits) - 1
 
@@ -238,8 +238,8 @@ class FP8_Codec:
 
         # === 单独格式 ===
         if fp_format is not None:
-            if fp_format not in FP8_Codec.FORMATS:
-                raise ValueError(f"Unsupported format '{fp_format}'. Must be one of {list(FP8_Codec.FORMATS.keys())}")
+            if fp_format not in FP8Codec.FORMATS:
+                raise ValueError(f"Unsupported format '{fp_format}'. Must be one of {list(FP8Codec.FORMATS.keys())}")
             result = compute_range(fp_format)
             print(f"{fp_format.upper():>5} | normalized=[{result['normalized_min']:.3e}, {result['normalized_max']:.3e}]"
                   f"  denorm=[{result['denorm_min']:.3e}, {result['denorm_max']:.3e}]")
@@ -254,7 +254,7 @@ class FP8_Codec:
         return None
 
 if __name__ == "__main__": 
-    FP8_Codec.range_info()
+    FP8Codec.range_info()
     print("=== FP8 Codec Consistency Test ===")
 
     # 定义每个格式要测试的 5 组二进制输入
@@ -280,12 +280,12 @@ if __name__ == "__main__":
             test_data = int(test_data_str, 2)
 
             # Decode
-            v, _, _, _, flag = FP8_Codec.decode(test_data, fmt)
+            v, _, _, _, flag = FP8Codec.decode(test_data, fmt)
             print(f"[{fmt}] Case {i}: bin -> dec: {test_data_str} -> {v:.8g} || flag: {flag}")
 
             # Encode back
             try:
-                fp8_bin = FP8_Codec.encode(v, fmt)
+                fp8_bin = FP8Codec.encode(v, fmt)
                 match = (test_data_str == fp8_bin)
                 print(f"          dec -> bin: {v:.8g} -> {fp8_bin} | match={match}")
             except Exception as e:

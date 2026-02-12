@@ -1,9 +1,8 @@
-from utils.Multiplier import Multiplier
-from utils.Adder import Adder   
-from utils.Decoder import FP8_Codec
-from utils.Multiplier import Multiplier
-from utils.test_data_gen import Data_Gen
-from Matmul import FP8MatrixMultiplier
+from utils.multiplier import Multiplier
+from utils.adder import Adder   
+from utils.decoder import FP8Codec
+from utils.top_matmul import FP8MatrixMultiplier
+from utils.data_gen import DataGen
 import numpy as np
 
 def test_data_in(format: str = 'e3m4'):
@@ -57,10 +56,10 @@ def mac_test(format: str = 'e3m4'):
         print(f"res_{i}: ")
         print(f"    Binary:  {a_bin} * {b_bin} + {c_bin} -> RESULT={res_bin}")
         if res_bin != 'pass':
-            a_val = FP8_Codec.decode(int(a_bin, 2), format)[0]
-            b_val = FP8_Codec.decode(int(b_bin, 2), format)[0]
-            c_val = FP8_Codec.decode(int(c_bin, 2), format)[0]
-            r_val = FP8_Codec.decode(int(res_bin, 2), format)[0]
+            a_val = FP8Codec.decode(int(a_bin, 2), format)[0]
+            b_val = FP8Codec.decode(int(b_bin, 2), format)[0]
+            c_val = FP8Codec.decode(int(c_bin, 2), format)[0]
+            r_val = FP8Codec.decode(int(res_bin, 2), format)[0]
             print(f"    Decimal: {a_val} x {b_val} + {c_val} = {r_val}\n")
 
     print("=== Tests completed ===\n")
@@ -75,9 +74,9 @@ def adder_test(format: str = 'e2m5'):
         print(f"res_{i}:")
         print(f"    Binary:  {a_bin} + {b_bin} -> RESULT={res_bin}")
         if res_bin != 'pass':
-                a_val = FP8_Codec.decode(int(a_bin, 2), format)[0]
-                b_val = FP8_Codec.decode(int(b_bin, 2), format)[0]
-                r_val = FP8_Codec.decode(int(res_bin, 2), format)[0]
+                a_val = FP8Codec.decode(int(a_bin, 2), format)[0]
+                b_val = FP8Codec.decode(int(b_bin, 2), format)[0]
+                r_val = FP8Codec.decode(int(res_bin, 2), format)[0]
                 print(f"    Decimal: {a_val} + {b_val} = {r_val}\n")
 
 def add_mul_test(format: str = 'e3m4'):
@@ -90,19 +89,19 @@ def add_mul_test(format: str = 'e3m4'):
         print(f"res_{i}:")
         print(f"    Binary:  {b_bin} x {c_bin} -> RESULT={res_bin}")
         if res_bin != 'pass':
-                b_val = FP8_Codec.decode(int(b_bin, 2), format)[0]
-                c_val = FP8_Codec.decode(int(c_bin, 2), format)[0]
-                r_val = FP8_Codec.decode(int(res_bin, 2), format)[0]
+                b_val = FP8Codec.decode(int(b_bin, 2), format)[0]
+                c_val = FP8Codec.decode(int(c_bin, 2), format)[0]
+                r_val = FP8Codec.decode(int(res_bin, 2), format)[0]
                 print(f"    Decimal: {b_val} x {c_val} = {r_val}\n")
 
 def data_gen_test():
     np.set_printoptions(precision=6, suppress=True)
 
     demos = [
-        ("uniform", Data_Gen(row=3, col=3, value_range=(1.0, 2.0), dist="uniform")),
-        ("normal", Data_Gen(row=3, col=3, value_range=(1.0, 2.0), dist="normal")),
-        ("laplace", Data_Gen(row=3, col=3, value_range=(1.0, 2.0), dist="laplace")),
-        ("student_t", Data_Gen(row=3, col=3, value_range=(1.0, 2.0), dist="student_t", dist_params={"df": 3})),
+        ("uniform", DataGen(row=3, col=3, value_range=(1.0, 2.0), dist="uniform")),
+        ("normal", DataGen(row=3, col=3, value_range=(1.0, 2.0), dist="normal")),
+        ("laplace", DataGen(row=3, col=3, value_range=(1.0, 2.0), dist="laplace")),
+        ("student_t", DataGen(row=3, col=3, value_range=(1.0, 2.0), dist="student_t", dist_params={"df": 3})),
     ]
     for name, generator in demos:
         print(f"\n===== Testing {name} distribution =====")

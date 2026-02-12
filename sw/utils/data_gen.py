@@ -1,13 +1,13 @@
 import numpy as np
 from typing import Optional, Sequence, Tuple, Union, Dict, Any
-from .Decoder import FP8_Codec
-from .Multiplier import Multiplier
-from .Adder import Adder
+from .decoder import FP8Codec
+from .multiplier import Multiplier
+from .adder import Adder
 
 SeedType = Optional[Union[int, Tuple[int, int]]]
 
 
-class Data_Gen:
+class DataGen:
     """
     Data generator for FASA testing.
 
@@ -140,17 +140,17 @@ class Data_Gen:
         
         # Initialize result matrix with FP8 zero representation
         mat_c = [[0 for _ in range(cols_b)] for _ in range(rows_a)]
-        exp_bit, mant_bit, _ = FP8_Codec._get_format_params(self.format)
+        exp_bit, mant_bit, _ = FP8Codec._get_format_params(self.format)
         for i in range(rows_a):
             for j in range(cols_b):
                 # Initialize accumulator with FP8 zero
                 dot_product = '0' * (1 + exp_bit + mant_bit)  # FP8 representation of 0.0
                 for k in range(cols_a):
-                    value_a_str = FP8_Codec.encode(mat_a[i][k], self.format)
-                    value_b_str = FP8_Codec.encode(mat_b[k][j], self.format)
+                    value_a_str = FP8Codec.encode(mat_a[i][k], self.format)
+                    value_b_str = FP8Codec.encode(mat_b[k][j], self.format)
                     # Element-wise multiplication
                     dot_product = self.mac_unit(value_a_str, value_b_str, dot_product)
-                val, *_ = FP8_Codec.decode(int(dot_product, 2), fp_format=self.format)
+                val, *_ = FP8Codec.decode(int(dot_product, 2), fp_format=self.format)
                 mat_c[i][j] = val
 
         return mat_a, mat_b, mat_c
@@ -158,7 +158,7 @@ class Data_Gen:
 
 if __name__ == "__main__":
     # Demo usage
-    gen = Data_Gen(row=3, col=4, value_range=(1.0, 2.0))
+    gen = DataGen(row=3, col=4, value_range=(1.0, 2.0))
 
     # Deterministic example with separate seeds for A and B
     A, B, C = gen.fasa_test_data(format="e4m3", seed=(8, 10))

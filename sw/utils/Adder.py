@@ -1,9 +1,9 @@
-from .Decoder import FP8_Codec
+from .decoder import FP8Codec
 
 class Adder:
     def __init__(self, format: str = 'e3m4'):
         self.format = format
-        self.e_bits, self.m_bits, _ = FP8_Codec._get_format_params(format)
+        self.e_bits, self.m_bits, _ = FP8Codec._get_format_params(format)
 
     def int_bin_adder(self, a: str, b: str) -> str:
         """
@@ -153,10 +153,10 @@ if __name__ == "__main__":
         adder = Adder(format=fmt)
 
         def enc(x: float) -> str:
-            return FP8_Codec.encode(x, fp_format=fmt)
+            return FP8Codec.encode(x, fp_format=fmt)
 
         def dec(bits: str) -> float:
-            v, *_ = FP8_Codec.decode(int(bits, 2), fp_format=fmt)
+            v, *_ = FP8Codec.decode(int(bits, 2), fp_format=fmt)
             return v
 
         # 1) small values (should not overflow)

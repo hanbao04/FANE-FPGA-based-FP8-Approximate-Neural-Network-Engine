@@ -1,9 +1,9 @@
-from .Decoder import FP8_Codec
-from .Adder import Adder
+from .decoder import FP8Codec
+from .adder import Adder
 
 class Multiplier:
     def __init__(self, format: str = 'e3m4', bin_output: bool = False):
-        e_bits, m_bits, bias = FP8_Codec._get_format_params(format)
+        e_bits, m_bits, bias = FP8Codec._get_format_params(format)
         self.fmt = format
         self.exp_bits = e_bits
         self.mant_bits = m_bits
@@ -87,7 +87,7 @@ class Multiplier:
         if sign == 1:
             mul_xy = -mul_xy
 
-        return mul_xy if self.bin_output == False else FP8_Codec.encode(mul_xy, self.fmt)
+        return mul_xy if self.bin_output == False else FP8Codec.encode(mul_xy, self.fmt)
     
     def L_Mul(self, value_a: str, value_b: str):
         """
@@ -115,7 +115,7 @@ class Multiplier:
         if sign == 1:
             L_mul_xy = -L_mul_xy
         
-        return L_mul_xy if self.bin_output == False else FP8_Codec.encode(L_mul_xy, self.fmt)
+        return L_mul_xy if self.bin_output == False else FP8Codec.encode(L_mul_xy, self.fmt)
     
     def FASA(self, value_a: str, value_b: str) -> str:
         """
@@ -144,4 +144,4 @@ class Multiplier:
         if sign == 1:
             L_mul_xy = -L_mul_xy
         
-        return L_mul_xy if self.bin_output == False else FP8_Codec.encode(L_mul_xy, self.fmt)
+        return L_mul_xy if self.bin_output == False else FP8Codec.encode(L_mul_xy, self.fmt)
