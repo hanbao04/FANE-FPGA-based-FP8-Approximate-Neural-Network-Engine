@@ -5,6 +5,7 @@ from utils.Decoder import FP8_Codec
 from utils.Adder import Adder
 from utils.Multiplier import Multiplier
 from utils.test_data_gen import Data_Gen
+from typing import Optional, Sequence, Tuple, Union, Dict, Any
 
 class FP8MatrixMultiplier:
     """
@@ -211,7 +212,9 @@ class FP8MatrixMultiplier:
         
         return C
     
-    def test_fasa(self, size, value_range):
+    def test_fasa(self, size, dist = 'uniform',
+                 value_range: Sequence[float] = (1.0, 2.0), 
+                 dist_params: Optional[Dict[str, Any]] = None):
         """
         Test FASA matrix multiplication with generated data.
         
@@ -223,7 +226,8 @@ class FP8MatrixMultiplier:
                 - reference_result (numpy.ndarray): Exact element-wise product
                 - fasa_result (list): FASA approximate multiplication result
         """
-        data_gen = Data_Gen(size, size, self.format, value_range)
+        data_gen = Data_Gen(row=size, col=size, format=self.format,
+                    dist=dist, value_range=value_range)
 
         # Generate test data
         mat_a, mat_b, mat_res = data_gen.fasa_test_data()
@@ -233,7 +237,9 @@ class FP8MatrixMultiplier:
         
         return mat_res, fasa_result
     
-    def test_standard(self, size, value_range):
+    def test_standard(self, size, dist = 'uniform',
+                 value_range: Sequence[float] = (1.0, 2.0), 
+                 dist_params: Optional[Dict[str, Any]] = None):
         """
         Test standard FP8 matrix multiplication with generated data.
         
@@ -245,7 +251,8 @@ class FP8MatrixMultiplier:
                 - reference_result (numpy.ndarray): Exact element-wise product
                 - standard_result (list): Standard FP8 multiplication result
         """
-        data_gen = Data_Gen(size, size, self.format, value_range)
+        data_gen = Data_Gen(row=size, col=size, format=self.format,
+                    dist=dist, value_range=value_range)
 
         # Generate test data
         mat_a, mat_b, mat_res = data_gen.fasa_test_data()
@@ -255,7 +262,9 @@ class FP8MatrixMultiplier:
         
         return mat_res, standard_result
     
-    def test_lmul(self, size, value_range):
+    def test_lmul(self, size, dist = 'uniform',
+                 value_range: Sequence[float] = (1.0, 2.0), 
+                 dist_params: Optional[Dict[str, Any]] = None):
         """
         Test standard FP8 matrix multiplication with generated data.
         
@@ -267,7 +276,8 @@ class FP8MatrixMultiplier:
                 - reference_result (numpy.ndarray): Exact element-wise product
                 - standard_result (list): Standard FP8 multiplication result
         """
-        data_gen = Data_Gen(size, size, self.format, value_range)
+        data_gen = Data_Gen(row=size, col=size, format=self.format,
+                    dist=dist, value_range=value_range)
 
         # Generate test data
         mat_a, mat_b, mat_res = data_gen.fasa_test_data()
@@ -307,6 +317,59 @@ class FP8MatrixMultiplier:
         rmse = math.sqrt(mse)
         return rmse
 
+def run_test(dist = 'uniform', dist_params: Optional[Dict[str, Any]] = None):
+    print(f'============= Data Dist = {dist} =============')
+    fasa_runs, std_runs, lmul_runs = [], [], []
+    fasa_error, standard_error, lmul_error = [], [], []
+    range_val = range_val_dict[fmt]
+    for size in sizes:
+        ref_fasa,  fasa_res  = mat_mult.test_fasa(size=size, value_range=range_val, dist = dist)
+        ref_std ,  std_res   = mat_mult.test_standard(size=size, value_range=range_val, dist = dist)
+        ref_lmul,  lmul_res  = mat_mult.test_lmul(size=size, value_range=range_val, dist = dist)
+
+        fasa_error.append(mat_mult.calculate_rmse       (ref_fasa,  fasa_res))
+        standard_error.append(mat_mult.calculate_rmse   (ref_std,   std_res))
+        lmul_error.append(mat_mult.calculate_rmse       (ref_lmul,  lmul_res))
+
+    fasa_runs.append(fasa_error)
+    std_runs.append(standard_error)
+    lmul_runs.append(lmul_error)
+
+    # (n_runs, T)
+    fasa_runs = np.asarray(fasa_runs, dtype=float)
+    std_runs  = np.asarray(std_runs,  dtype=float)
+    lmul_runs = np.asarray(lmul_runs, dtype=float)
+
+    # 均值 & 样本标准差
+    fasa_mean, fasa_std = fasa_runs.mean(axis=0), fasa_runs.std(axis=0, ddof=1)
+    std_mean,  std_std  = std_runs.mean(axis=0),  std_runs.std(axis=0,  ddof=1)
+    lmul_mean, lmul_std = lmul_runs.mean(axis=0), lmul_runs.std(axis=0, ddof=1)
+
+    # 95% 置信区间半宽 = t_{0.975, n-1} * (std / sqrt(n))
+    n = fasa_runs.shape[0]
+    tcrit = t_crit_975(n)
+    fasa_ci95 = tcrit * fasa_std / math.sqrt(n)
+    std_ci95  = tcrit * std_std  / math.sqrt(n)
+    lmul_ci95 = tcrit * lmul_std / math.sqrt(n)
+
+    # 打印结果
+    def fmt_arr(a): return [float(f"{v:.6f}") for v in a]
+    print(f"n_runs = {n}, t_crit_0.975 = {tcrit:.3f}")
+    print(f"fasa_{fmt}_mean = {fmt_arr(fasa_mean)}")
+    print(f"fasa_{fmt}_std  = {fmt_arr(fasa_std)}")
+    print(f"fasa_{fmt}_ci_high = {fmt_arr(fasa_mean + fasa_ci95)}")
+    print(f"fasa_{fmt}_ci_low = {fmt_arr(fasa_mean - fasa_ci95)}")
+
+    print(f"standard_{fmt}_mean = {fmt_arr(std_mean)}")
+    print(f"standard_{fmt}_std  = {fmt_arr(std_std)}")
+    print(f"standard_{fmt}_ci_high = {fmt_arr(std_mean + std_ci95)}")
+    print(f"standard_{fmt}_ci_low = {fmt_arr(std_mean - std_ci95)}")
+
+    print(f"lmul_{fmt}_mean = {fmt_arr(lmul_mean)}")
+    print(f"lmul_{fmt}_std  = {fmt_arr(lmul_std)}")
+    print(f"lmul_{fmt}_ci_high = {fmt_arr(lmul_mean + lmul_ci95)}")
+    print(f"lmul_{fmt}_ci_low = {fmt_arr(lmul_mean - lmul_ci95)}")
+
 if __name__ == "__main__":
     # Create matrix multiplier with E4M3 format
     range_val_dict = {
@@ -319,7 +382,7 @@ if __name__ == "__main__":
     tot_fasa_error = [0, 0, 0, 0, 0, 0, 0, 0]
     tot_standard_error = []
     tot_lmul_error = []
-    max_iter = 4
+    max_iter = 40
 
     sizes = [3, 6, 9, 16, 32, 48, 64, 128]
 
@@ -338,60 +401,13 @@ if __name__ == "__main__":
             return _T975[df]
         return 1.96  # n>=30 近似
 
-    for fmt in ['e5m2']:
-        print(f"Testing format: {fmt}")
-
-        fasa_runs, std_runs, lmul_runs = [], [], []
+    for fmt in ['e5m2', 'e4m3', 'e3m4', 'e2m5']:
+        print(f"========================== Testing format: {fmt} ==========================")
 
         for it in range(max_iter):
             mat_mult = FP8MatrixMultiplier(format=fmt)
-            fasa_error, standard_error, lmul_error = [], [], []
-            range_val = range_val_dict[fmt]
-            for size in sizes:
-                ref_fasa,  fasa_res  = mat_mult.test_fasa(size=size, value_range=range_val)
-                ref_std,   std_res   = mat_mult.test_standard(size=size, value_range=range_val)
-                ref_lmul,  lmul_res  = mat_mult.test_lmul(size=size, value_range=range_val)
-
-                fasa_error.append(mat_mult.calculate_rmse(ref_fasa,  fasa_res))
-                standard_error.append(mat_mult.calculate_rmse(ref_std,   std_res))
-                lmul_error.append(mat_mult.calculate_rmse(ref_lmul,  lmul_res))
-
-            fasa_runs.append(fasa_error)
-            std_runs.append(standard_error)
-            lmul_runs.append(lmul_error)
-
-        # (n_runs, T)
-        fasa_runs = np.asarray(fasa_runs, dtype=float)
-        std_runs  = np.asarray(std_runs,  dtype=float)
-        lmul_runs = np.asarray(lmul_runs, dtype=float)
-
-        # 均值 & 样本标准差
-        fasa_mean, fasa_std = fasa_runs.mean(axis=0), fasa_runs.std(axis=0, ddof=1)
-        std_mean,  std_std  = std_runs.mean(axis=0),  std_runs.std(axis=0,  ddof=1)
-        lmul_mean, lmul_std = lmul_runs.mean(axis=0), lmul_runs.std(axis=0, ddof=1)
-
-        # 95% 置信区间半宽 = t_{0.975, n-1} * (std / sqrt(n))
-        n = fasa_runs.shape[0]
-        tcrit = t_crit_975(n)
-        fasa_ci95 = tcrit * fasa_std / math.sqrt(n)
-        std_ci95  = tcrit * std_std  / math.sqrt(n)
-        lmul_ci95 = tcrit * lmul_std / math.sqrt(n)
-
-        # 打印结果
-        def fmt_arr(a): return [float(f"{v:.6f}") for v in a]
-        print(f"n_runs = {n}, t_crit_0.975 = {tcrit:.3f}")
-        print(f"fasa_{fmt}_mean = {fmt_arr(fasa_mean)}")
-        print(f"fasa_{fmt}_std  = {fmt_arr(fasa_std)}")
-        print(f"fasa_{fmt}_ci_high = {fmt_arr(fasa_mean + fasa_ci95)}")
-        print(f"fasa_{fmt}_ci_low = {fmt_arr(fasa_mean - fasa_ci95)}")
-
-        print(f"standard_{fmt}_mean = {fmt_arr(std_mean)}")
-        print(f"standard_{fmt}_std  = {fmt_arr(std_std)}")
-        print(f"standard_{fmt}_ci_high = {fmt_arr(std_mean + std_ci95)}")
-        print(f"standard_{fmt}_ci_low = {fmt_arr(std_mean - std_ci95)}")
-
-        print(f"lmul_{fmt}_mean = {fmt_arr(lmul_mean)}")
-        print(f"lmul_{fmt}_std  = {fmt_arr(lmul_std)}")
-        print(f"lmul_{fmt}_ci_high = {fmt_arr(lmul_mean + lmul_ci95)}")
-        print(f"lmul_{fmt}_ci_low = {fmt_arr(lmul_mean - lmul_ci95)}")
-
+            run_test(dist = 'uniform')
+            run_test(dist = 'normal')
+            run_test(dist = 'laplace')
+            run_test(dist = 'student_t')
+            

@@ -1,9 +1,8 @@
 import numpy as np
-from typing import Optional, Sequence, Tuple, Union
+from typing import Optional, Sequence, Tuple, Union, Dict, Any
 from .Decoder import FP8_Codec
 from .Multiplier import Multiplier
 from .Adder import Adder
-from typing import Optional, Dict, Any, Sequence
 
 SeedType = Optional[Union[int, Tuple[int, int]]]
 
