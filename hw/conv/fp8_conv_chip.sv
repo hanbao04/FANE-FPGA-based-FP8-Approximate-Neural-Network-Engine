@@ -9,7 +9,7 @@ module fane_conv_chip #(
 	parameter D_W = 48,
 	parameter URAM_D_W = 72,
 	parameter URAM_A_W = 23,
-        parameter Y = 16
+        parameter Y = 6
 )
 (
 input clk,
@@ -61,12 +61,13 @@ generate for (y = 0; y < Y; y = y + 1) begin : name
         ,.uram1_wr_addr         (uram1_wr_addr[y])
         ,.uram1_wr_data         (uram1_wr_data[y])
         ,.uram1_wr_en           (uram1_wr_en[y])
-        ,.uram2_rd_addr_external (uram2_rd_addr_external[y])
-        ,.read_en_external      (read_en_external[y])
-        ,.uram2_rd_data         (uram2_rd_data[y])
-        ,.krnl_bram1_wraddr     (krnl_bram1_wraddr[y])
-        ,.krnl_bram1_wrdata     (krnl_bram1_wrdata[y])
-        ,.krnl_bram1_wren       (krnl_bram1_wren[y])
+         ,.uram2_rd_addr_external (uram2_rd_addr_external[y])
+         ,.read_en_external      (read_en_external[y])
+         ,.uram2_rd_data         (uram2_rd_data[y])
+         ,.ld_new_kernel         (ld_new_kernel[y])
+         ,.krnl_bram1_wraddr     (krnl_bram1_wraddr[y])
+         ,.krnl_bram1_wrdata     (krnl_bram1_wrdata[y])
+         ,.krnl_bram1_wren       (krnl_bram1_wren[y])
 //        ,.CAS_OUT_ADDR          (addr_chain[y+1])
 //        ,.CAS_OUT_BWE           (bwe_chain[y+1])
 //        ,.CAS_OUT_DBITERR       (dbiterr_chain[y+1])

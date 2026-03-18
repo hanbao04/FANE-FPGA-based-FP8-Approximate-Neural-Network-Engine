@@ -56,50 +56,29 @@ The software evaluation flow currently covers:
 
 ## Hardware Part
 
-The hardware directory contains RTL sources for the main accelerator building blocks:
+The hardware directory contains the RTL implementation of the main FANE building blocks.
 
-- `hw/fp8_mac/`: FP8 add-mul and MAC-related modules, including a simulation testbench.
-- `hw/mm/`: FP8 matrix multiplication design files and top-level wrappers.
-- `hw/conv/`: FP8 convolution engine files, address generation logic, and wrapper/top modules.
+### Directory Structure
 
-These files are intended to represent the hardware implementation side of the FANE architecture and can be used as a starting point for FPGA synthesis, integration, or further accelerator exploration.
+- `hw/fp8_mac/`: source and simulation files for the FP8 arithmetic core.
+- `hw/mm/`: matrix multiplication datapath, chip-level wrapper, and a directed smoke testbench.
+- `hw/conv/`: convolution datapath, address-generation logic, chip-level wrapper, and a directed smoke testbench.
 
-## Quick Start
+### Main Hardware Modules
 
-### Requirements
+- `hw/fp8_mac/src/fp8_addmul.v`: approximate FP8 multiply pipeline.
+- `hw/fp8_mac/src/fp8_adder.v`: FP8 adder used for accumulation.
+- `hw/fp8_mac/src/fane_mac.v`: MAC wrapper around the FP8 multiply and add stages. 
 
-- Python 3.x
-- `numpy`
+- `hw/mm/fp8_mac.v`: MAC wrapper around the FP8 multiply and add stages.(Re-pack in order to satisfy the pipeline)
+- `hw/mm/fp8_mm.v`: core matrix-multiplication engine.
+- `hw/mm/fp8_mm_top.v`: matrix-multiplication top-level control and memory integration.
+- `hw/mm/fp8_mm_chip.sv`: chip-style wrapper that instantiates multiple MM tiles.
+- `hw/conv/fp8_conv_mm_tb.sv`: testbench for MVM unit.
 
-Install the Python dependency with:
-
-```bash
-pip install numpy
-```
-
-### Run Functional Tests
-
-From the repository root:
-
-```bash
-python sw/test.py
-```
-
-This script includes examples for:
-
-- MAC operation tests
-- adder tests
-- add-mul tests
-- random data generation demos
-
-You can enable additional test calls by editing the `if __name__ == "__main__":` section in `sw/test.py`.
-
-### Run Error Evaluation
-
-From the repository root:
-
-```bash
-python sw/main.py
-```
-
-This script evaluates multiple FP8 formats over several matrix sizes and input distributions, and prints RMSE statistics with confidence interval summaries.
+- `hw/conv/fp8_mac.v`: MAC wrapper around the FP8 multiply and add stages.(Re-pack in order to satisfy the pipeline)
+- `hw/conv/fp8_addr_gen.v`: address generator used by the convolution pipeline.
+- `hw/conv/fp8_conv.v`: core convolution compute engine.
+- `hw/conv/fp8_conv_top.v`: convolution control, buffering, and URAM/BRAM integration.
+- `hw/conv/fp8_conv_chip.sv`: chip-style wrapper that instantiates multiple convolution tiles.
+- `hw/conv/fp8_conv_chip_tb.sv`: testbench for conv unit. PLEASE run at least 3000ns and console gives the result.

@@ -1,4 +1,4 @@
-module fp8_mm_chip #(
+module fane_mm_chip #(
         parameter IMG_W = 4,
         parameter IMG_D = 6,
 	parameter A_W = 14,
@@ -26,16 +26,16 @@ input [URAM_D_W-1:0] uram4_wr_data [Y],
 input uram4_wr_en [Y],
 input [A_W-1:0]      bram1_rd_addr [Y],
 input bram1_rd_en [Y],
-output [7:0]          bram1_rd_data [Y],
+output [M_W-1:0]      bram1_rd_data [Y],
 input [A_W-1:0]      bram2_rd_addr [Y],
 input bram2_rd_en [Y],
-output [7:0]          bram2_rd_data [Y],
+output [M_W-1:0]      bram2_rd_data [Y],
 input [A_W-1:0]      bram3_rd_addr [Y],
 input bram3_rd_en [Y],
-output [7:0]          bram3_rd_data [Y],
+output [M_W-1:0]      bram3_rd_data [Y],
 input [A_W-1:0]      bram4_rd_addr [Y],
 input bram4_rd_en [Y],
-output [7:0]          bram4_rd_data [Y],
+output [M_W-1:0]      bram4_rd_data [Y],
 input [A_W-1:0]      b1_wr_addr [Y],
 input [15:0]         b1_wr_data [Y],
 input b1_wr_en [Y],
@@ -57,11 +57,11 @@ input b8_wr_en [Y],
 input [A_W-1:0]      b9_wr_addr [Y],
 input b9_wr_en [Y],
 input	[22:0]	addr_chain [Y],
-input	[8:0]	bwe_chain  [Y],  
+input	[8:0]	bwe_chain  [Y],
 input	[0:0]	dbiterr_chain [Y],
 input	[71:0]	din_chain [Y],
-input	[71:0]	dout_chain [Y],        
-input	[0:0]	en_chain [Y],          
+input	[71:0]	dout_chain [Y],
+input	[0:0]	en_chain [Y],
 input	[0:0]	rdacess_chain [Y],
 input	[0:0]	rdb_wr_chain [Y],
 input	[0:0]	sbiterr_chain [Y]
@@ -71,7 +71,7 @@ input	[0:0]	sbiterr_chain [Y]
 genvar y;
 
 generate for (y = 0; y < Y; y = y + 1) begin : name
- (* dont_touch = "true" *)  fp8_mm_top #(
+ (* dont_touch = "true" *)  fane_mm_top #(
          .IMG_W    (IMG_W)
         ,.IMG_D    (IMG_D)
 	,.A_W      (A_W)
@@ -97,7 +97,7 @@ generate for (y = 0; y < Y; y = y + 1) begin : name
         ,.uram4_wr_addr         (uram4_wr_addr[y])
         ,.uram4_wr_data         (uram4_wr_data[y])
         ,.uram4_wr_en           (uram4_wr_en[y])
-        ,.bram1_rd_addr         (bram1_rd_addr[y])          
+        ,.bram1_rd_addr         (bram1_rd_addr[y])
         ,.bram1_rd_data         (bram1_rd_data[y])
         ,.bram1_rd_en           (bram1_rd_en[y])
         ,.bram2_rd_addr         (bram2_rd_addr[y])
@@ -109,7 +109,7 @@ generate for (y = 0; y < Y; y = y + 1) begin : name
         ,.bram4_rd_addr         (bram4_rd_addr[y])
         ,.bram4_rd_en           (bram4_rd_en[y])
         ,.bram4_rd_data         (bram4_rd_data[y])
-        ,.b1_wr_addr            (b1_wr_addr [y])  
+        ,.b1_wr_addr            (b1_wr_addr [y])
         ,.b1_wr_data            (b1_wr_data [y])
         ,.b1_wr_en              (b1_wr_en[y])
         ,.b2_wr_addr            (b2_wr_addr [y])
@@ -145,4 +145,3 @@ endgenerate
 
 
 endmodule
-
