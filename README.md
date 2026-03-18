@@ -1,5 +1,7 @@
 # FANE: FPGA-based FP8 Approximate Neural Network Engine
 
+[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.19098450.svg)](https://doi.org/10.5281/zenodo.19098450)
+
 This repository contains the reference software and hardware artifacts for the paper **FANE: FPGA-based FP8 Approximate Neural Network Engine**.
 
 The project is organized around two complementary parts:
