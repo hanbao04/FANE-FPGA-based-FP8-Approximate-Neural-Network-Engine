@@ -1,0 +1,10 @@
+xsim.dir/
+*.wdb
+*.pb
+*.jou
+*.log
+*.backup.jou
+*.backup.log
+xvlog.log
+xsim.log
+xelab.log

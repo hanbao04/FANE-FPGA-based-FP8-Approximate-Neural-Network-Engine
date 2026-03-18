@@ -136,6 +136,18 @@ module fane_conv_chip_tb;
     end
   endfunction
 
+  function automatic [URAM_D_W-1:0] calc_expected_word;
+    byte unsigned partial_sum;
+    begin
+      // Current smoke TB uses the local simplified fane_mac stub, where the
+      // first visible non-zero result is driven by img_vec[0] + kernel_vec[0].
+      partial_sum = img_vec[0] + kernel_vec[0];
+      calc_expected_word = '0;
+      calc_expected_word[7:0]   = partial_sum;
+      calc_expected_word[39:32] = partial_sum;
+    end
+  endfunction
+
   task automatic write_image_word(input [URAM_A_W-1:0] addr, input [URAM_D_W-1:0] data_word);
     begin
       uram1_wr_addr[0] <= addr;
@@ -219,7 +231,7 @@ module fane_conv_chip_tb;
 
     img_vec    = '{8'h01, 8'h02, 8'h03, 8'h04, 8'h05, 8'h06, 8'h07, 8'h08, 8'h09};
     kernel_vec = '{8'h11, 8'h12, 8'h13, 8'h14, 8'h15, 8'h16, 8'h17, 8'h18, 8'h19};
-    expected_word = 72'h000000001200000012;
+    expected_word = calc_expected_word();
 
     $display("========== fane_conv_chip_tb start ==========");
     print_vectors();

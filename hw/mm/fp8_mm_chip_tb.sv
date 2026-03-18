@@ -10,6 +10,7 @@ module fp8_mm_chip_tb;
   localparam int URAM_D_W = 72;
   localparam int URAM_A_W = 23;
   localparam int Y        = 1;
+  localparam int NUM_TESTS = 4;
 
   logic clk;
   logic rst;
@@ -74,6 +75,8 @@ module fp8_mm_chip_tb;
 
   byte unsigned uram_vec [4][9];
   byte unsigned weight_vec [9];
+  byte unsigned uram_tests [NUM_TESTS][4][9];
+  byte unsigned weight_tests [NUM_TESTS][9];
   logic [M_W-1:0] expected [4];
 
   fane_mm_chip #(
@@ -216,15 +219,36 @@ module fp8_mm_chip_tb;
     end
   endfunction
 
-  function automatic [M_W-1:0] calc_expected(
-    input byte unsigned a0
-  );
+  function automatic [M_W-1:0] calc_expected(input byte unsigned a0);
     int total;
     begin
       total = a0 + weight_vec[0];
       calc_expected = total[7:0];
     end
   endfunction
+
+  task automatic print_vectors(input int test_id);
+    int bank;
+    int idx;
+    begin
+      for (bank = 0; bank < 4; bank++) begin
+        $write("test[%0d] uram%0d bytes :", test_id, bank + 1);
+        for (idx = 0; idx < 9; idx++) begin
+          $write(" %02h", uram_vec[bank][idx]);
+        end
+        $write("\n");
+      end
+
+      $write("test[%0d] weight bytes:", test_id);
+      for (idx = 0; idx < 9; idx++) begin
+        $write(" %02h", weight_vec[idx]);
+      end
+      $write("\n");
+
+      $display("test[%0d] expected mm1=0x%0h mm2=0x%0h mm3=0x%0h mm4=0x%0h",
+        test_id, expected[0], expected[1], expected[2], expected[3]);
+    end
+  endtask
 
   task automatic write_uram(input int sel, input [URAM_D_W-1:0] data_word);
     begin
@@ -279,78 +303,110 @@ module fp8_mm_chip_tb;
   endtask
 
   task automatic check_result(
+    input int test_id,
     input string tag,
     input logic [M_W-1:0] actual,
     input logic [M_W-1:0] exp
   );
     begin
-      $display("%s actual=0x%0h expected=0x%0h", tag, actual, exp);
+      $display("test[%0d] %s actual=0x%0h expected=0x%0h", test_id, tag, actual, exp);
       if (actual !== exp) begin
-        $error("%s mismatch: expected 0x%0h, got 0x%0h", tag, exp, actual);
+        $error("test[%0d] %s mismatch: expected 0x%0h, got 0x%0h", test_id, tag, exp, actual);
       end else begin
-        $display("%s OK: 0x%0h", tag, actual);
+        $display("test[%0d] %s OK: 0x%0h", test_id, tag, actual);
       end
     end
   endtask
 
   initial begin
+    int t;
+
     clk = 1'b0;
     rst = 1'b1;
     ce  = 1'b1;
     clear_drivers();
 
-    weight_vec[0] = 8'h11;
-    weight_vec[1] = 8'h22;
-    weight_vec[2] = 8'h00;
-    weight_vec[3] = 8'h00;
-    weight_vec[4] = 8'h00;
-    weight_vec[5] = 8'h00;
-    weight_vec[6] = 8'h00;
-    weight_vec[7] = 8'h00;
-    weight_vec[8] = 8'h00;
+    uram_tests[0][0] = '{8'h01, 8'h02, 8'h03, 8'h04, 8'h05, 8'h06, 8'h07, 8'h08, 8'h09};
+    uram_tests[0][1] = '{8'h10, 8'h11, 8'h12, 8'h13, 8'h14, 8'h15, 8'h16, 8'h17, 8'h18};
+    uram_tests[0][2] = '{8'h20, 8'h21, 8'h22, 8'h23, 8'h24, 8'h25, 8'h26, 8'h27, 8'h28};
+    uram_tests[0][3] = '{8'h30, 8'h31, 8'h32, 8'h33, 8'h34, 8'h35, 8'h36, 8'h37, 8'h38};
+    weight_tests[0]  = '{8'h11, 8'h22, 8'h00, 8'h00, 8'h00, 8'h00, 8'h00, 8'h00, 8'h00};
 
-    uram_vec[0] = '{8'h01, 8'h02, 8'h03, 8'h04, 8'h05, 8'h06, 8'h07, 8'h08, 8'h09};
-    uram_vec[1] = '{8'h10, 8'h11, 8'h12, 8'h13, 8'h14, 8'h15, 8'h16, 8'h17, 8'h18};
-    uram_vec[2] = '{8'h20, 8'h21, 8'h22, 8'h23, 8'h24, 8'h25, 8'h26, 8'h27, 8'h28};
-    uram_vec[3] = '{8'h30, 8'h31, 8'h32, 8'h33, 8'h34, 8'h35, 8'h36, 8'h37, 8'h38};
+    uram_tests[1][0] = '{8'h05, 8'h15, 8'h25, 8'h35, 8'h45, 8'h55, 8'h65, 8'h75, 8'h85};
+    uram_tests[1][1] = '{8'h06, 8'h16, 8'h26, 8'h36, 8'h46, 8'h56, 8'h66, 8'h76, 8'h86};
+    uram_tests[1][2] = '{8'h07, 8'h17, 8'h27, 8'h37, 8'h47, 8'h57, 8'h67, 8'h77, 8'h87};
+    uram_tests[1][3] = '{8'h08, 8'h18, 8'h28, 8'h38, 8'h48, 8'h58, 8'h68, 8'h78, 8'h88};
+    weight_tests[1]  = '{8'h03, 8'h44, 8'h00, 8'h00, 8'h00, 8'h00, 8'h00, 8'h00, 8'h00};
 
-    expected[0] = calc_expected(uram_vec[0][0]);
-    expected[1] = calc_expected(uram_vec[1][0]);
-    expected[2] = calc_expected(uram_vec[2][0]);
-    expected[3] = calc_expected(uram_vec[3][0]);
+    uram_tests[2][0] = '{8'hff, 8'h01, 8'h02, 8'h03, 8'h04, 8'h05, 8'h06, 8'h07, 8'h08};
+    uram_tests[2][1] = '{8'h0a, 8'h0b, 8'h0c, 8'h0d, 8'h0e, 8'h0f, 8'h10, 8'h11, 8'h12};
+    uram_tests[2][2] = '{8'h13, 8'h14, 8'h15, 8'h16, 8'h17, 8'h18, 8'h19, 8'h1a, 8'h1b};
+    uram_tests[2][3] = '{8'h1c, 8'h1d, 8'h1e, 8'h1f, 8'h20, 8'h21, 8'h22, 8'h23, 8'h24};
+    weight_tests[2]  = '{8'h01, 8'h99, 8'h00, 8'h00, 8'h00, 8'h00, 8'h00, 8'h00, 8'h00};
 
-    repeat (4) @(posedge clk);
-    rst = 1'b0;
+    uram_tests[3][0] = '{8'h2a, 8'h2b, 8'h2c, 8'h2d, 8'h2e, 8'h2f, 8'h30, 8'h31, 8'h32};
+    uram_tests[3][1] = '{8'h3a, 8'h3b, 8'h3c, 8'h3d, 8'h3e, 8'h3f, 8'h40, 8'h41, 8'h42};
+    uram_tests[3][2] = '{8'h4a, 8'h4b, 8'h4c, 8'h4d, 8'h4e, 8'h4f, 8'h50, 8'h51, 8'h52};
+    uram_tests[3][3] = '{8'h5a, 8'h5b, 8'h5c, 8'h5d, 8'h5e, 8'h5f, 8'h60, 8'h61, 8'h62};
+    weight_tests[3]  = '{8'h05, 8'haa, 8'h00, 8'h00, 8'h00, 8'h00, 8'h00, 8'h00, 8'h00};
 
-    write_weight_bram(1, {8'h00, weight_vec[0]});
-    write_weight_bram(2, {8'h00, weight_vec[1]});
-    write_uram(1, pack_uram(uram_vec[0]));
-    write_uram(2, pack_uram(uram_vec[1]));
-    write_uram(3, pack_uram(uram_vec[2]));
-    write_uram(4, pack_uram(uram_vec[3]));
+    $display("========== fp8_mm_chip_tb start ==========");
 
-    repeat (2) @(posedge clk);
-    rst = 1'b1;
-    repeat (3) @(posedge clk);
-    rst = 1'b0;
+    for (t = 0; t < NUM_TESTS; t++) begin
+      uram_vec   = uram_tests[t];
+      weight_vec = weight_tests[t];
+      expected[0] = calc_expected(uram_vec[0][0]);
+      expected[1] = calc_expected(uram_vec[1][0]);
+      expected[2] = calc_expected(uram_vec[2][0]);
+      expected[3] = calc_expected(uram_vec[3][0]);
 
-    repeat (40) @(posedge clk);
+      clear_drivers();
+      rst = 1'b1;
+      repeat (4) @(posedge clk);
+      $display("---------- test[%0d] ----------", t);
+      print_vectors(t);
 
-    bram1_rd_addr[0] <= '0;
-    bram2_rd_addr[0] <= '0;
-    bram3_rd_addr[0] <= '0;
-    bram4_rd_addr[0] <= '0;
-    bram1_rd_en[0]   <= 1'b1;
-    bram2_rd_en[0]   <= 1'b1;
-    bram3_rd_en[0]   <= 1'b1;
-    bram4_rd_en[0]   <= 1'b1;
+      rst = 1'b0;
+      write_weight_bram(1, {8'h00, weight_vec[0]});
+      write_weight_bram(2, {8'h00, weight_vec[1]});
+      write_uram(1, pack_uram(uram_vec[0]));
+      write_uram(2, pack_uram(uram_vec[1]));
+      write_uram(3, pack_uram(uram_vec[2]));
+      write_uram(4, pack_uram(uram_vec[3]));
 
-    repeat (4) @(posedge clk);
+      repeat (2) @(posedge clk);
+      rst = 1'b1;
+      repeat (3) @(posedge clk);
+      rst = 1'b0;
 
-    check_result("mm1", bram1_rd_data[0], expected[0]);
-    check_result("mm2", bram2_rd_data[0], expected[1]);
-    check_result("mm3", bram3_rd_data[0], expected[2]);
-    check_result("mm4", bram4_rd_data[0], expected[3]);
+      repeat (40) @(posedge clk);
+
+      bram1_rd_addr[0] <= '0;
+      bram2_rd_addr[0] <= '0;
+      bram3_rd_addr[0] <= '0;
+      bram4_rd_addr[0] <= '0;
+      bram1_rd_en[0]   <= 1'b1;
+      bram2_rd_en[0]   <= 1'b1;
+      bram3_rd_en[0]   <= 1'b1;
+      bram4_rd_en[0]   <= 1'b1;
+
+      repeat (4) @(posedge clk);
+
+      $display("test[%0d] internal mm1 bram_wr_data: 0x%0h", t, dut.name[0].dut.mm1.bram_wr_data);
+      $display("test[%0d] internal mm2 bram_wr_data: 0x%0h", t, dut.name[0].dut.mm2.bram_wr_data);
+      $display("test[%0d] internal mm3 bram_wr_data: 0x%0h", t, dut.name[0].dut.mm3.bram_wr_data);
+      $display("test[%0d] internal mm4 bram_wr_data: 0x%0h", t, dut.name[0].dut.mm4.bram_wr_data);
+
+      check_result(t, "mm1", bram1_rd_data[0], expected[0]);
+      check_result(t, "mm2", bram2_rd_data[0], expected[1]);
+      check_result(t, "mm3", bram3_rd_data[0], expected[2]);
+      check_result(t, "mm4", bram4_rd_data[0], expected[3]);
+
+      bram1_rd_en[0] <= 1'b0;
+      bram2_rd_en[0] <= 1'b0;
+      bram3_rd_en[0] <= 1'b0;
+      bram4_rd_en[0] <= 1'b0;
+    end
 
     $display("fp8_mm_chip_tb completed");
     $finish;
