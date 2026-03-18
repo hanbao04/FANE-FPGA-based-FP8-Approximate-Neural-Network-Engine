@@ -1,26 +1,7 @@
 `timescale 1ns / 1ps
 //////////////////////////////////////////////////////////////////////////////////
-// Company: 
-// Engineer: 
-// 
-// Create Date: 03/18/2026 03:19:53 PM
-// Design Name: 
-// Module Name: fp8_conv_tb
-// Project Name: 
-// Target Devices: 
-// Tool Versions: 
-// Description: 
-// 
-// Dependencies: 
-// 
-// Revision:
-// Revision 0.01 - File Created
-// Additional Comments:
 // !!!!!!! PLEASE RUN AT LEAST 3000ns
 //////////////////////////////////////////////////////////////////////////////////
-
-
-`timescale 1ns/1ps
 
 module fane_conv_chip_tb;
 

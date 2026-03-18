@@ -1,3 +1,5 @@
+`timescale 1ns / 1ps
+
 module fane_addr_gen #(
         parameter IMG_W = 4,
         parameter NUMBER_OF_REG = 1,

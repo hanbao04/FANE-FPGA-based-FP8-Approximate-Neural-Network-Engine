@@ -1,3 +1,5 @@
+`timescale 1ns / 1ps
+
 module fane_mm_chip #(
         parameter IMG_W = 4,
         parameter IMG_D = 6,

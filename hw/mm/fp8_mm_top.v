@@ -1,3 +1,5 @@
+`timescale 1ns / 1ps
+
 module fane_mm_top #(
         parameter IMG_W = 9,
         parameter IMG_D = 2,

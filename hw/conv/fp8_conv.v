@@ -1,3 +1,5 @@
+`timescale 1ns / 1ps
+
 module fane_conv #(
     parameter A_W = 14,
     parameter M_W = 18,

@@ -1,3 +1,5 @@
+`timescale 1ns / 1ps
+
 module fane_mac #(
     parameter EXP_WIDTH  = 4,
     parameter MANT_WIDTH = 3
