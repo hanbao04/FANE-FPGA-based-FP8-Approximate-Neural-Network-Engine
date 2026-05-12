@@ -81,8 +81,10 @@ The hardware directory contains the RTL implementation of the main FANE building
 - `hw/conv/fp8_mac.v`: MAC wrapper around the FP8 multiply and add stages.(Re-pack in order to satisfy the pipeline)
 - `hw/conv/fp8_addr_gen.v`: address generator used by the convolution pipeline.
 - `hw/conv/fp8_conv.v`: core convolution compute engine.
-
-## A bug in addmul and mm module is found and has been modified accordingly. The edge case test for addmul should be 0 instead of 2's complementory, therefore a LUT2 is changed to LUT3 for new logic.
 - `hw/conv/fp8_conv_top.v`: convolution control, buffering, and URAM/BRAM integration.
 - `hw/conv/fp8_conv_chip.sv`: chip-style wrapper that instantiates multiple convolution tiles.
 - `hw/conv/fp8_conv_chip_tb.sv`: testbench for conv unit. PLEASE run at least 3000ns and console gives the result.
+
+## A bug in addmul and mm module is found and has been modified accordingly. The edge case test for addmul should be 0 instead of 2's complementory, therefore a LUT2 is changed to LUT3 for new logic.
+
+
