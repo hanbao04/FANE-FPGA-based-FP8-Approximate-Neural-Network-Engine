@@ -1,5 +1,3 @@
-`timescale 1ns / 1ps
-
 module fane_conv_top #(
         parameter KERN_SZ = 3,
         parameter IMG_W = 4,
@@ -10,8 +8,10 @@ module fane_conv_top #(
         parameter CASCADE_ORDER_A_RDURAM = "NONE",
         parameter CASCADE_ORDER_A_WRURAM = "NONE",
         parameter NUMBER_OF_REG = 1,
-	   parameter URAM_D_W = 72,
-	   parameter URAM_A_W = 23
+	parameter URAM_D_W = 72,
+	parameter URAM_A_W = 23,
+      parameter EXP_WIDTH = 3,
+    parameter MANT_WIDTH = 4
 )
 (
 input clk,
@@ -27,6 +27,9 @@ input ld_new_kernel,
 input [A_W-1:0] krnl_bram1_wraddr,
 input [M_W-1:0] krnl_bram1_wrdata,
 input krnl_bram1_wren,
+input [A_W-1:0] krnl_bram2_wraddr,
+input [M_W-1:0] krnl_bram2_wrdata,
+input krnl_bram2_wren,
 
 //rd uram cascade signals
 output	[22:0]	CAS_OUT_ADDR,
@@ -145,7 +148,8 @@ wire [A_W-1:0]           b2_rd_addr;
 wire [A_W-1:0]           b3_rd_addr;
 wire                     init_done;
 wire [URAM_D_W-1:0]      uram_rd_data;
-wire [15:0]              data_out_conv1;
+wire [15:0]              data_out_conv1; 
+wire [15:0]              data_out_conv2;
 wire [URAM_D_W-1:0]      uram2_rd_data_tmp;
 wire	[22:0]	CAS_OUT_ADDR_LOCAL;
 wire	[8:0]	CAS_OUT_BWE_LOCAL;		
@@ -157,7 +161,7 @@ wire	[0:0]	CAS_OUT_RDACCESS_LOCAL;
 wire	[0:0]	CAS_OUT_RDB_WR_LOCAL;
 wire	[0:0]	CAS_OUT_SBITERR_LOCAL;	
 
-fane_addr_gen #(
+ (* dont_touch = "true" *)addr_gen #(
          .IMG_W        (IMG_W)
 	,.URAM_A_W     (URAM_A_W)
 	,.BRAM_A_W     (A_W)
@@ -490,7 +494,7 @@ end
 
 //register data out from convolution unit 3-times
 always@(posedge clk) begin
-  data_out_conv_r1 <= {16'd0, data_out_conv1};
+  data_out_conv_r1 <= {data_out_conv2, data_out_conv1};
   data_out_conv_r2 <= data_out_conv_r1;
   data_out_conv_r3 <= data_out_conv_r2;
   data_out_conv_r4 <= data_out_conv_r3;
@@ -501,12 +505,12 @@ end
 always@(posedge clk) begin
 add1 = data_out_conv_r4[7:0]   + uram2_rd_data_r[7:0];
 add2 = data_out_conv_r4[15:8]  + uram2_rd_data_r[15:8];
-add3 = 8'd0 + uram2_rd_data_r[23:16];
-add4 = 8'd0 + uram2_rd_data_r[31:24];
+add3 = data_out_conv_r4[23:16] + uram2_rd_data_r[23:16];
+add4 = data_out_conv_r4[31:24] + uram2_rd_data_r[31:24];
 add5 = data_out_conv_r3[7:0]   + uram2_rd_data_r[39:32];
 add6 = data_out_conv_r3[15:8]  + uram2_rd_data_r[47:40];
-add7 = 8'd0 + uram2_rd_data_r[55:48];
-add8 = 8'd0 + uram2_rd_data_r[63:56];
+add7 = data_out_conv_r3[23:16] + uram2_rd_data_r[55:48];
+add8 = data_out_conv_r3[31:24] + uram2_rd_data_r[63:56];
 end
 
 assign uram2_rd_data = uram2_rd_data_r;
@@ -561,6 +565,8 @@ end
 	,.URAM_D_W (URAM_D_W)
 	,.URAM_A_W (URAM_A_W)
         ,.NUMBER_OF_REG (NUMBER_OF_REG)
+        ,.EXP_WIDTH(EXP_WIDTH)
+    ,.MANT_WIDTH(MANT_WIDTH)
 )
 conv1 (
     .clk        (clk)
@@ -583,6 +589,40 @@ conv1 (
    ,.rdaddr_b   (rdaddr_b) 
    ,.data_in    (uram_rd_data_r[15:0])
    ,.data_out   (data_out_conv1)
+);
+
+//assign data_out_conv2 = 'b0;
+
+ (* dont_touch = "true" *) fane_conv #(
+	 .A_W (A_W)
+	,.M_W (M_W)
+	,.URAM_D_W (URAM_D_W)
+	,.URAM_A_W (URAM_A_W)
+        ,.NUMBER_OF_REG (NUMBER_OF_REG)
+        ,.EXP_WIDTH(EXP_WIDTH)
+    ,.MANT_WIDTH(MANT_WIDTH)
+)
+conv2 (
+    .clk        (clk)
+   ,.rst        (rst)
+   ,.ce         (ce)
+   ,.ce_b_in    (ce_b_tmp)
+   ,.ce_dsp     (ce_dsp)
+   ,.knl_b_wraddr (krnl_bram2_wraddr)
+   ,.knl_b_wrdata (krnl_bram2_wrdata)
+   ,.knl_b_wren   (krnl_bram2_wren)
+   ,.b1_wr_addr (b1_wr_addr) 
+   ,.b1_wr_en   (b1_wr_en)
+   ,.b2_wr_addr (b2_wr_addr)
+   ,.b2_wr_en   (b2_wr_en)
+   ,.b3_wr_addr (b3_wr_addr)
+   ,.b3_wr_en   (b3_wr_en)
+   ,.b1_rd_addr (b1_rd_addr)
+   ,.b2_rd_addr (b2_rd_addr)
+   ,.b3_rd_addr (b3_rd_addr)
+   ,.rdaddr_b   (rdaddr_b) 
+   ,.data_in    (uram_rd_data_r[31:16])
+   ,.data_out   (data_out_conv2)
 );
 
 endmodule

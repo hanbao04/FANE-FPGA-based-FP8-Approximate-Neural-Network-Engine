@@ -1,15 +1,15 @@
-`timescale 1ns / 1ps
-
-module fane_conv_chip #(
+module dsp_conv_chip #(
         parameter KERN_SZ = 3,
         parameter IMG_W = 4,
         parameter IMG_D = 6,
-	parameter A_W = 14,
-	parameter M_W = 18,
-	parameter D_W = 48,
-	parameter URAM_D_W = 72,
-	parameter URAM_A_W = 23,
-        parameter Y = 6
+        parameter A_W = 14,
+        parameter M_W = 18,
+        parameter D_W = 48,
+        parameter URAM_D_W = 72,
+        parameter URAM_A_W = 23,
+        parameter Y = 16,
+        parameter EXP_WIDTH = 2,
+        parameter MANT_WIDTH = 5
 )
 (
 input clk,
@@ -25,6 +25,9 @@ input ld_new_kernel [Y],
 input [A_W-1:0] krnl_bram1_wraddr [Y],
 input [M_W-1:0] krnl_bram1_wrdata [Y],
 input krnl_bram1_wren [Y],
+input [A_W-1:0] krnl_bram2_wraddr [Y],
+input [M_W-1:0] krnl_bram2_wrdata [Y],
+input krnl_bram2_wren [Y],
 input	[22:0]	addr_chain [Y],
 input	[8:0]	bwe_chain  [Y],  
 input	[0:0]	dbiterr_chain [Y],
@@ -53,6 +56,8 @@ generate for (y = 0; y < Y; y = y + 1) begin : name
         ,.NUMBER_OF_REG (3)
 	,.URAM_D_W (URAM_D_W)
 	,.URAM_A_W (URAM_A_W)
+        ,.EXP_WIDTH(EXP_WIDTH)
+        ,.MANT_WIDTH(MANT_WIDTH)
   )
   dut (
          .clk                   (clk)
@@ -61,13 +66,15 @@ generate for (y = 0; y < Y; y = y + 1) begin : name
         ,.uram1_wr_addr         (uram1_wr_addr[y])
         ,.uram1_wr_data         (uram1_wr_data[y])
         ,.uram1_wr_en           (uram1_wr_en[y])
-         ,.uram2_rd_addr_external (uram2_rd_addr_external[y])
-         ,.read_en_external      (read_en_external[y])
-         ,.uram2_rd_data         (uram2_rd_data[y])
-         ,.ld_new_kernel         (ld_new_kernel[y])
-         ,.krnl_bram1_wraddr     (krnl_bram1_wraddr[y])
-         ,.krnl_bram1_wrdata     (krnl_bram1_wrdata[y])
-         ,.krnl_bram1_wren       (krnl_bram1_wren[y])
+        ,.uram2_rd_addr_external (uram2_rd_addr_external[y])
+        ,.read_en_external      (read_en_external[y])
+        ,.uram2_rd_data         (uram2_rd_data[y])
+        ,.krnl_bram1_wraddr     (krnl_bram1_wraddr[y])
+        ,.krnl_bram1_wrdata     (krnl_bram1_wrdata[y])
+        ,.krnl_bram1_wren       (krnl_bram1_wren[y])
+        ,.krnl_bram2_wraddr     (krnl_bram2_wraddr[y])
+        ,.krnl_bram2_wrdata     (krnl_bram2_wrdata[y])
+        ,.krnl_bram2_wren       (krnl_bram2_wren[y])
 //        ,.CAS_OUT_ADDR          (addr_chain[y+1])
 //        ,.CAS_OUT_BWE           (bwe_chain[y+1])
 //        ,.CAS_OUT_DBITERR       (dbiterr_chain[y+1])
