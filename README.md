@@ -59,6 +59,7 @@ The software evaluation flow currently covers:
 ## Hardware Part
 
 The hardware directory contains the RTL implementation of the main FANE building blocks.
+Power derived from PDM tool v2025.2
 
 ### Directory Structure
 
@@ -70,7 +71,7 @@ The hardware directory contains the RTL implementation of the main FANE building
 
 - `hw/fp8_mac/src/fp8_addmul.v`: approximate FP8 multiply pipeline.
 - `hw/fp8_mac/src/fp8_adder.v`: FP8 adder used for accumulation.
-- `hw/fp8_mac/src/fane_mac.v`: MAC wrapper around the FP8 multiply and add stages. 
+- `hw/fp8_mac/src/fane_mac.v`: MAC wrapper around the FP8 multiply and add stages. Mainly used for value evaluting.
 
 - `hw/mm/fp8_mac.v`: MAC wrapper around the FP8 multiply and add stages.(Re-pack in order to satisfy the pipeline)
 - `hw/mm/fp8_mm.v`: core matrix-multiplication engine.

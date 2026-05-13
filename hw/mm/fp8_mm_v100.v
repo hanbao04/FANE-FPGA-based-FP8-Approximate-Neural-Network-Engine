@@ -462,10 +462,17 @@ always@(posedge clk) begin
   end
 end
 
+wire [7:0] final_add_result;
+fpadder #(.e(4), .m(3)) U_FINAL_ADD (
+   .clk   (clk                 ),
+   .rst_n (~rst                ),
+   .en    (en                  ), 
+   .a     (bram_rd_data_r[7:0] ),
+   .b     (pout_reg[7:0]       ),
+   .result(final_add_result    )
+);
 always@(posedge clk) begin
-//  bram_wr_data <= bram_rd_data_r + pout_reg[24:7]; 
-bram_wr_data <= bram_rd_data_r[7:0] + pout_reg[7:0]; 
-  //bram_wr_data <= bram_rd_data_r + pout_reg[15:0]; 
+   bram_wr_data  <= final_add_result;
 end
 
 always@(posedge clk) begin
