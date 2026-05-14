@@ -100,7 +100,7 @@ The hardware directory contains the RTL building blocks used to implement the FA
 
 ### Fine-Grained Minimum Unit
 
-`hw/fg_min_unit/` contains additional RTL experiments for fine-grained compute blocks, including matrix-vector and convolution-oriented modules, constraints, adders, and FP8 data-path components.
+`hw/fg_min_unit/` contains minimum RTL blocks with fine-grained design, including matrix-vector and convolution-oriented modules, constraints, adders, and FP8 data-path components.
 
 ### Matrix Multiplication
 
