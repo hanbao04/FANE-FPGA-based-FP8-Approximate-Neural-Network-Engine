@@ -23,8 +23,11 @@ wire    [7:0]   prod_out    ;
 reg     [7:0]   sum_r0      ;
 reg     [7:0]   sum_r1      ;
 reg     [7:0]   sum_r2      ;
+reg     [7:0]   sum_r3      ;
 reg     [7:0]   ain_r0      ;
+reg     [7:0]   ain_r1      ;
 reg     [7:0]   bin_r0      ;
+reg     [7:0]   bin_r1      ;
 wire    [7:0]   acc_res     ;
 
 generate
@@ -74,6 +77,43 @@ generate
                     sum_r2 <= sum_r1;
                     ain_r0 <= mul_a ;
                     bin_r0 <= mul_b ;
+                end
+            end
+        end
+    end else if (NUM_INREG == 3) begin : triple_inreg
+        (* dont_touch = "true" *) addmul U_FP8_ADDMUL(
+            .sys_clk (clk        ),
+            .rst_n   (rst_n      ),
+            .en      (en_2       ),
+            .w_fp8_x (ain_r1     ),
+            .w_fp8_y (bin_r1     ),
+            .product (prod_out   )
+        );
+
+        (* dont_touch = "true" *) fpadder#(
+            .e      (EXP_WIDTH      ),
+            .m      (MANT_WIDTH     )
+        ) U_FP8_ADDER(
+            .a      (sum_r3         ),
+            .b      (prod_out       ),
+            .result (acc_res        )
+        );
+        always @(posedge clk or negedge rst_n) begin
+            if(!rst_n) begin
+                sum_r2 <= 8'd0;
+                sum_r3 <= 8'd0;
+                ain_r0 <= 8'b0;
+                ain_r1 <= 8'b0;
+                bin_r0 <= 8'b0;
+                bin_r1 <= 8'b0;
+            end else begin
+                if (en_1) begin
+                    sum_r2 <= sum_r1;
+                    sum_r3 <= sum_r2;
+                    ain_r0 <= mul_a ;
+                    ain_r1 <= ain_r0;
+                    bin_r0 <= mul_b ;
+                    bin_r1 <= bin_r0;
                 end
             end
         end

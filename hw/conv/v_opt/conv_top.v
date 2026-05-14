@@ -1,12 +1,13 @@
-module conv_top #(
-        parameter IMG_W = 9,
-        parameter IMG_D = 2,
-    parameter EXP_WIDTH  = 4,
-    parameter MANT_WIDTH = 3,
+module dsp_conv_top #(
+        parameter KERN_SZ = 3,
+        parameter IMG_W = 4,
+        parameter IMG_D = 6,
 	parameter A_W = 14,
 	parameter M_W = 18,
 	parameter D_W = 48,
-        parameter NUMBER_OF_REG = 3,
+        parameter CASCADE_ORDER_A_RDURAM = "NONE",
+        parameter CASCADE_ORDER_A_WRURAM = "NONE",
+        parameter NUMBER_OF_REG = 1,
 	parameter URAM_D_W = 72,
 	parameter URAM_A_W = 23
 )
@@ -17,47 +18,17 @@ input ce,
 input [URAM_A_W-1:0] uram1_wr_addr,
 input [URAM_D_W-1:0] uram1_wr_data,
 input uram1_wr_en,
-input [URAM_A_W-1:0] uram2_wr_addr,
-input [URAM_D_W-1:0] uram2_wr_data,
-input uram2_wr_en,
-input [URAM_A_W-1:0] uram3_wr_addr,
-input [URAM_D_W-1:0] uram3_wr_data,
-input uram3_wr_en,
-input [URAM_A_W-1:0] uram4_wr_addr,
-input [URAM_D_W-1:0] uram4_wr_data,
-input uram4_wr_en,
-input [A_W-1:0]      bram1_rd_addr,
-input                bram1_rd_en,
-output [M_W-1:0]      bram1_rd_data,
-input [A_W-1:0]      bram2_rd_addr,
-input                bram2_rd_en,
-output [M_W-1:0]      bram2_rd_data,
-input [A_W-1:0]      bram3_rd_addr,
-input                bram3_rd_en,
-output [M_W-1:0]      bram3_rd_data,
-input [A_W-1:0]      bram4_rd_addr,
-input                bram4_rd_en,
-output [M_W-1:0]      bram4_rd_data,
-input [A_W-1:0]      b1_wr_addr,
-input [7:0]          b1_wr_data,
-input b1_wr_en,
-input [A_W-1:0]      b2_wr_addr,
-input [7:0]          b2_wr_data,
-input b2_wr_en,
-input [A_W-1:0]      b3_wr_addr,
-input b3_wr_en,
-input [A_W-1:0]      b4_wr_addr,
-input b4_wr_en,
-input [A_W-1:0]      b5_wr_addr,
-input b5_wr_en,
-input [A_W-1:0]      b6_wr_addr,
-input b6_wr_en,
-input [A_W-1:0]      b7_wr_addr,
-input b7_wr_en,
-input [A_W-1:0]      b8_wr_addr,
-input b8_wr_en,
-input [A_W-1:0]      b9_wr_addr,
-input b9_wr_en,
+input [URAM_A_W-1:0] uram2_rd_addr_external,
+input read_en_external,
+output [URAM_D_W-1:0] uram2_rd_data,
+input ld_new_kernel,
+input [A_W-1:0] krnl_bram1_wraddr,
+input [M_W-1:0] krnl_bram1_wrdata,
+input krnl_bram1_wren,
+input [A_W-1:0] krnl_bram2_wraddr,
+input [M_W-1:0] krnl_bram2_wrdata,
+input krnl_bram2_wren,
+
 //rd uram cascade signals
 output	[22:0]	CAS_OUT_ADDR,
 output	[8:0]	CAS_OUT_BWE,		
@@ -77,107 +48,139 @@ input   [0:0]	CAS_IN_EN,
 input   [0:0]	CAS_IN_RDACCESS,	
 input   [0:0]	CAS_IN_RDB_WR,		
 input   [0:0]	CAS_IN_SBITERR	
-
 );
 
-localparam NO_ITR_W = IMG_W/9; // number of iterations for width (/9 because one DOT product operation takes 9 operands)
-localparam NO_ITR_D = IMG_D; // number of iterations for depth
-
+localparam NO_ITR_W = IMG_W - KERN_SZ + 1; // number of iterations for width
+localparam NO_ITR_D = (IMG_D - KERN_SZ + 1)/2; // number of iterations for depth (/2 because SIMD)
 //state machine for controlling clock enable image reading
-localparam RST_s   = 3'b001;
-localparam READ_s  = 3'b010;
-localparam DONE_s  = 3'b100;
+localparam RST_s       = 6'b000001;
+localparam HIGH1_s     = 6'b000010;
+localparam HIGH2_s     = 6'b000100;
+localparam HIGH3_s     = 6'b001000;
+localparam DONE_s      = 6'b010000;
+localparam INIT_DONE_s = 6'b100000;
 
-reg [2:0]                         p_state;
-reg [2:0]                         n_state;
-reg [$clog2(NO_ITR_W*NO_ITR_D):0] rem_img_sz;
-reg                               ce_dsp, ce_dsp_r, ce_dsp_2r, ce_dsp_1, ce_dsp_2;
-reg                               ce_dsp_opr1;
-reg                               ce_dsp_opr2;
-reg [13:0]                        master_rdaddr;
-reg [13:0]                        master_rdaddr_r;
-reg [13:0]                        master_rdaddr_2r;
-reg [13:0]                        master_rdaddr_3r;
-reg [13:0]                        master_rdaddr_4r;
-reg [13:0]                        master_rdaddr_5r;
-reg [13:0]                        master_rdaddr_6r;
-reg [13:0]                        master_rdaddr_7r;
-reg [15:0]                        rd_data1_r1;
-reg [15:0]                        rd_data2_r1;
-reg [15:0]                        rd_data3_r1;
-reg [15:0]                        rd_data4_r1;
-reg [15:0]                        rd_data5_r1;
-reg [15:0]                        rd_data6_r1;
-reg [15:0]                        rd_data7_r1;
-reg [15:0]                        rd_data8_r1;
-reg [15:0]                        rd_data9_r1;
-reg [15:0]                        rd_data1_r2;
-reg [15:0]                        rd_data2_r2;
-reg [15:0]                        rd_data3_r2;
-reg [15:0]                        rd_data4_r2;
-reg [15:0]                        rd_data5_r2;
-reg [15:0]                        rd_data6_r2;
-reg [15:0]                        rd_data7_r2;
-reg [15:0]                        rd_data8_r2;
-reg [15:0]                        rd_data9_r2;
+//state machine for controlling clock enable kernel reading
+localparam k_RST_s   = 10'b0000000001;
+localparam k_HIGH1_s = 10'b0000000010;
+localparam k_HIGH2_s = 10'b0000000100;
+localparam k_HIGH3_s = 10'b0000001000;
+localparam k_HIGH4_s = 10'b0000010000;
+localparam k_HIGH5_s = 10'b0000100000;
+localparam k_HIGH6_s = 10'b0001000000;
+localparam k_HIGH7_s = 10'b0010000000;
+localparam k_HIGH8_s = 10'b0100000000;
+localparam k_HIGH9_s = 10'b1000000000;
 
+reg [5:0]                p_state;
+reg [5:0]                n_state;
+reg [9:0]                k_state;
+reg                      read_en_from_ce_state_machine;
+reg [$clog2(NO_ITR_W):0] rem_img_sz_w;
+reg [$clog2(NO_ITR_D):0] rem_img_sz_d;
+reg [URAM_D_W-1:0]       uram_rd_data_r; 
+reg [URAM_D_W-1:0]       uram_rd_data_r1; 
+reg [URAM_D_W-1:0]       uram_rd_data_r2; 
+reg                      ce_dsp;
+reg                      pc_o_valid_tmp;
+reg                      pc_o_valid_tmp_r;
+reg                      pc_o_valid_tmp_r2;
+reg                      pc_o_valid_tmp_r3;
+reg                      pc_o_valid_tmp_r4;
+reg                      pc_o_valid_tmp_r5;
+reg                      pc_o_valid_tmp_r6;
+reg                      pc_o_valid_tmp_r7;
+reg                      pc_o_valid_tmp_r8;
+reg                      pc_o_valid_tmp_r9;
+reg                      pc_o_valid_tmp_r10;
+reg                      pc_o_valid_tmp_r11;
+reg                      pc_o_valid_tmp_r12;
+reg                      pc_o_valid_tmp_r13;
+reg                      pc_o_valid_tmp_r14;
+reg                      pc_o_valid_tmp_r15;
+reg                      pc_o_valid_tmp_r16;
+reg                      pc_o_valid_tmp_r17;
+reg                      pc_o_valid_tmp_r18;
+reg                      pc_o_valid_tmp_r19;
+reg                      pc_o_valid_tmp_r20;
+reg                      pc_o_valid_tmp_r21;
+reg [A_W-1:0]            rdaddr_b;
+reg                      uram2_wr_en;
+reg                      data_valid;
+reg                      data_valid_r;
+reg                      data_valid_2r;
+reg                      data_valid_tog;
+reg                      data_valid_tog_r;
+reg                      data_valid_tog_2r;
+reg                      data_valid_tog_3r;
+reg  [URAM_D_W-1:0]      uram2_wr_data;
+reg                      ce_b_tmp;
+reg  [URAM_A_W-1:0]      uram2_rd_addr; 
+reg  [URAM_A_W-1:0]      rd_addr_temp; 
+reg  [URAM_A_W-1:0]      wr_addr_temp;
+reg [7:0]              add1;
+reg [7:0]              add2;
+reg [7:0]              add3;
+reg [7:0]              add4;
+reg [7:0]              add5;
+reg [7:0]              add6;
+reg [7:0]              add7;
+reg [7:0]              add8;
+reg [31:0]              data_out_conv_r1; 
+reg [31:0]              data_out_conv_r2; 
+reg [31:0]              data_out_conv_r3; 
+reg [31:0]              data_out_conv_r4; 
+reg [URAM_A_W-1:0]      uram_rd_addr_internal;
+reg [URAM_D_W-1:0]      uram2_rd_data_r;
+ 
 
-wire [2:0]                        ce_tmp;
-wire [15:0]                       rd_data1;
-wire [15:0]                       rd_data2;
-wire [15:0]                       rd_data3;
-wire [15:0]                       rd_data4;
-wire [15:0]                       rd_data5;
-wire [15:0]                       rd_data6;
-wire [15:0]                       rd_data7;
-wire [15:0]                       rd_data8;
-wire [15:0]                       rd_data9;
-wire [15:0]                       rd_data1_tmp;
-wire [15:0]                       rd_data2_tmp;
-wire [15:0]                       rd_data3_tmp;
-wire [15:0]                       rd_data4_tmp;
-wire [15:0]                       rd_data5_tmp;
-wire [15:0]                       rd_data6_tmp;
-wire [15:0]                       rd_data7_tmp;
-wire [15:0]                       rd_data8_tmp;
-wire [15:0]                       rd_data9_tmp;
-wire [M_W-1:0]                    casc_data_b1;
-wire [M_W-1:0]                    casc_data_b2;
-wire [M_W-1:0]                    casc_data_b3;
-wire [M_W-1:0]                    casc_data_b4;
-wire [M_W-1:0]                    casc_data_b5;
-wire [M_W-1:0]                    casc_data_b6;
-wire [M_W-1:0]                    casc_data_b7;
+wire [URAM_A_W-1:0]      uram1_rd_addr;
+wire [A_W-1:0]           b1_wr_addr;
+wire                     b1_wr_en;
+wire [A_W-1:0]           b2_wr_addr;
+wire                     b2_wr_en;
+wire [A_W-1:0]           b3_wr_addr;
+wire                     b3_wr_en;
+wire [A_W-1:0]           b1_rd_addr;
+wire [A_W-1:0]           b2_rd_addr;
+wire [A_W-1:0]           b3_rd_addr;
+wire                     init_done;
+wire [URAM_D_W-1:0]      uram_rd_data;
+wire [15:0]              data_out_conv1; 
+wire [15:0]              data_out_conv2;
+wire [URAM_D_W-1:0]      uram2_rd_data_tmp;
+wire	[22:0]	CAS_OUT_ADDR_LOCAL;
+wire	[8:0]	CAS_OUT_BWE_LOCAL;		
+wire	[0:0]	CAS_OUT_DBITERR_LOCAL;
+wire	[71:0]	CAS_OUT_DIN_LOCAL;
+wire	[71:0]	CAS_OUT_DOUT_LOCAL;		
+wire	[0:0]	CAS_OUT_EN_LOCAL;		
+wire	[0:0]	CAS_OUT_RDACCESS_LOCAL;
+wire	[0:0]	CAS_OUT_RDB_WR_LOCAL;
+wire	[0:0]	CAS_OUT_SBITERR_LOCAL;	
 
-wire	[22:0]	CAS_OUT_ADDR_LOCAL1;
-wire	[8:0]	CAS_OUT_BWE_LOCAL1;		
-wire	[0:0]	CAS_OUT_DBITERR_LOCAL1;
-wire	[71:0]	CAS_OUT_DIN_LOCAL1;
-wire	[71:0]	CAS_OUT_DOUT_LOCAL1;		
-wire	[0:0]	CAS_OUT_EN_LOCAL1;		
-wire	[0:0]	CAS_OUT_RDACCESS_LOCAL1;
-wire	[0:0]	CAS_OUT_RDB_WR_LOCAL1;
-wire	[0:0]	CAS_OUT_SBITERR_LOCAL1;	
-
-wire	[22:0]	CAS_OUT_ADDR_LOCAL2;
-wire	[8:0]	CAS_OUT_BWE_LOCAL2;		
-wire	[0:0]	CAS_OUT_DBITERR_LOCAL2;
-wire	[71:0]	CAS_OUT_DIN_LOCAL2;
-wire	[71:0]	CAS_OUT_DOUT_LOCAL2;		
-wire	[0:0]	CAS_OUT_EN_LOCAL2;		
-wire	[0:0]	CAS_OUT_RDACCESS_LOCAL2;
-wire	[0:0]	CAS_OUT_RDB_WR_LOCAL2;
-wire	[0:0]	CAS_OUT_SBITERR_LOCAL2;	
-
-wire	[22:0]	CAS_OUT_ADDR_LOCAL3;
-wire	[8:0]	CAS_OUT_BWE_LOCAL3;		
-wire	[0:0]	CAS_OUT_DBITERR_LOCAL3;
-wire	[71:0]	CAS_OUT_DIN_LOCAL3;
-wire	[71:0]	CAS_OUT_DOUT_LOCAL3;		
-wire	[0:0]	CAS_OUT_EN_LOCAL3;		
-wire	[0:0]	CAS_OUT_RDACCESS_LOCAL3;
-wire	[0:0]	CAS_OUT_RDB_WR_LOCAL3;
-wire	[0:0]	CAS_OUT_SBITERR_LOCAL3;	
+addr_gen #(
+         .IMG_W        (IMG_W)
+	,.URAM_A_W     (URAM_A_W)
+	,.BRAM_A_W     (A_W)
+        ,.NUMBER_OF_REG (NUMBER_OF_REG)
+) addr_gen_inst (
+         .clk          (clk)
+        ,.rst          (rst)
+        ,.ce           (ce)
+        ,.read_en_from_ce_state_machine (read_en_from_ce_state_machine)
+        ,.uram_rd_addr (uram1_rd_addr)
+        ,.b1_wr_addr   (b1_wr_addr)
+        ,.b1_wr_en     (b1_wr_en)
+        ,.b2_wr_addr   (b2_wr_addr)
+        ,.b2_wr_en     (b2_wr_en)
+        ,.b3_wr_addr   (b3_wr_addr)
+        ,.b3_wr_en     (b3_wr_en)
+        ,.b1_rd_addr   (b1_rd_addr)
+        ,.b2_rd_addr   (b2_rd_addr)
+        ,.b3_rd_addr   (b3_rd_addr)
+        ,.init_done    (init_done)
+);
 
 //state machine reading
 always@(posedge clk) begin
@@ -188,13 +191,18 @@ end
 always@(*) begin
   case (p_state)
     RST_s : begin 
-              n_state <= READ_s;
+              if (init_done) n_state <= HIGH1_s;
+              else n_state <= RST_s;
             end
-    READ_s : begin
-                if (rem_img_sz == 1)
+    HIGH1_s : n_state <= HIGH2_s;
+    HIGH2_s : n_state <= HIGH3_s;
+    HIGH3_s : begin
+                if (rem_img_sz_w == 0 && rem_img_sz_d == 1)
                   n_state <= DONE_s;
+                else if (rem_img_sz_w != 0)
+                  n_state <= HIGH3_s;
                 else
-                  n_state <= READ_s;
+                  n_state <= HIGH1_s;
               end
     DONE_s : begin
                if (rst)
@@ -207,650 +215,408 @@ always@(*) begin
 end
 
 always@(posedge clk) begin
-  if (rst) rem_img_sz <= 'b0;
+  if (rst) rem_img_sz_w <= 'b0;
   else begin
-    if (p_state[0]) rem_img_sz <= NO_ITR_W*NO_ITR_D;
-    else if (p_state[1]) rem_img_sz <= rem_img_sz - 1;
+    if (p_state[1]) rem_img_sz_w <= NO_ITR_W;
+    else if (p_state[2] && n_state[3]) rem_img_sz_w <= rem_img_sz_w - 1;
+    else if (p_state[3] && n_state[3]) rem_img_sz_w <= rem_img_sz_w - 1;
   end
 end
 
-/////////////////optional register ////////////////////////
+ always@(posedge clk) begin
+  if (rst) rem_img_sz_d <= 'b0;
+  else begin
+    if (p_state[0]) rem_img_sz_d <= NO_ITR_D;
+    else if (p_state[3] && rem_img_sz_w == 0) rem_img_sz_d <= rem_img_sz_d - 1;
+  end
+end 
+
+always@(posedge clk) begin
+    read_en_from_ce_state_machine <= (n_state[1] || n_state[2] || n_state[3]);
+end
+
+always@(posedge clk) begin
+  if (p_state[1] || p_state[2] || p_state[3])
+    ce_dsp <= 1'b1;
+  else
+    ce_dsp <= 1'b0;
+end
+
+
+///////////////////////////////// optinal register /////////////////
+generate if (NUMBER_OF_REG == 1) begin : option_1
+  always@(posedge clk) begin
+    uram_rd_data_r <= uram_rd_data;
+  end
+end endgenerate
+
+generate if (NUMBER_OF_REG == 2) begin : option_2
+  always@(posedge clk) begin
+    uram_rd_data_r1 <= uram_rd_data;
+    uram_rd_data_r  <= uram_rd_data_r1;
+  end
+end endgenerate
+
+generate if (NUMBER_OF_REG == 3) begin : option_3
+  always@(posedge clk) begin
+    uram_rd_data_r1 <= uram_rd_data;
+    uram_rd_data_r2 <= uram_rd_data_r1;
+    uram_rd_data_r  <= uram_rd_data_r2;
+  end
+end endgenerate
+////////////////////////////////////////////////////////////////////
+//URAM instantiation RD
+// image ram
+
+	(* dont_touch = "true" *)	URAM288 #(.IREG_PRE_A("TRUE"),.IREG_PRE_B("TRUE"),.OREG_A("TRUE"),.OREG_B("TRUE"),
+			.CASCADE_ORDER_A(CASCADE_ORDER_A_RDURAM), .CASCADE_ORDER_B("NONE"), .REG_CAS_A("TRUE"), .SELF_MASK_A(11'h7fe), .SELF_MASK_B(11'h7ff), .SELF_ADDR_A(11'h0))
+
+		//uram_inst_rd(
+		uram_inst_wr(
+			// dataflow
+			.RDB_WR_B(1'b0),
+			.BWE_B({9{1'b1}}),
+			.ADDR_B(uram1_rd_addr),
+			.DOUT_B(uram_rd_data),
+			.RDB_WR_A(uram1_wr_en),
+			.BWE_A({9{1'b1}}),
+			.ADDR_A(uram1_wr_addr),
+			.DIN_A(uram1_wr_data),
+			.DOUT_A(),
+
+	                .CAS_OUT_ADDR_A	   (CAS_OUT_ADDR_LOCAL),    		
+                        .CAS_OUT_BWE_A	   (CAS_OUT_BWE_LOCAL),       
+                        .CAS_OUT_DBITERR_A (CAS_OUT_DBITERR_LOCAL),
+                        .CAS_OUT_DIN_A	   (CAS_OUT_DIN_LOCAL),       
+                        .CAS_OUT_DOUT_A	   (CAS_OUT_DOUT_LOCAL),       
+                        .CAS_OUT_EN_A	   (CAS_OUT_EN_LOCAL),       
+                        .CAS_OUT_RDACCESS_A(CAS_OUT_RDACCESS_LOCAL),
+                        .CAS_OUT_RDB_WR_A  (CAS_OUT_RDB_WR_LOCAL),
+                        .CAS_OUT_SBITERR_A (CAS_OUT_SBITERR_LOCAL),
+                        .CAS_IN_ADDR_A	   (CAS_IN_ADDR),       
+                        .CAS_IN_BWE_A	   (CAS_IN_BWE),       
+                        .CAS_IN_DBITERR_A  (CAS_IN_DBITERR),
+                        .CAS_IN_DIN_A	   (CAS_IN_DIN),       
+                        .CAS_IN_DOUT_A	   (CAS_IN_DOUT),       
+                        .CAS_IN_EN_A	   (CAS_IN_EN), 
+                        .CAS_IN_RDACCESS_A (CAS_IN_RDACCESS),
+                        .CAS_IN_RDB_WR_A   (CAS_IN_RDB_WR),       	
+	                .CAS_IN_SBITERR_A  (CAS_IN_SBITERR),
+	              			
+			// clocking and control
+			.CLK(clk),
+			.EN_A(ce),
+			.EN_B(ce),
+			.OREG_CE_B(1'b1),
+			.OREG_ECC_CE_B(1'b0),
+			.RST_A(rst),
+			.RST_B(rst),
+			.SLEEP(1'b0)
+		);
+
+//URAM instantiation WR
+// image ram
+	(* dont_touch = "true" *)	URAM288 #(.IREG_PRE_A("TRUE"),.IREG_PRE_B("TRUE"),.OREG_A("TRUE"),.OREG_B("TRUE"),
+			.CASCADE_ORDER_A(CASCADE_ORDER_A_WRURAM), .CASCADE_ORDER_B("NONE"), .REG_CAS_A("TRUE"), .SELF_MASK_A(11'h7fe), .SELF_MASK_B(11'h7ff), .SELF_ADDR_A(11'h1))
+		//uram_inst_wr(
+		uram_inst_rd(
+			// dataflow
+			.RDB_WR_B(uram2_wr_en),
+			.BWE_B({9{1'b1}}),
+			.ADDR_B(uram2_rd_addr),
+                        .DIN_B(uram2_wr_data),
+			.DOUT_B(uram2_rd_data_tmp),
+			
+	                .CAS_OUT_ADDR_A	   (CAS_OUT_ADDR),    		
+                        .CAS_OUT_BWE_A	   (CAS_OUT_BWE),       
+                        .CAS_OUT_DBITERR_A (CAS_OUT_DBITERR),
+                        .CAS_OUT_DIN_A	   (CAS_OUT_DIN),       
+                        .CAS_OUT_DOUT_A	   (CAS_OUT_DOUT),       
+                        .CAS_OUT_EN_A	   (CAS_OUT_EN),       
+                        .CAS_OUT_RDACCESS_A(CAS_OUT_RDACCESS),
+                        .CAS_OUT_RDB_WR_A  (CAS_OUT_RDB_WR),
+                        .CAS_OUT_SBITERR_A (CAS_OUT_SBITERR),
+                        .CAS_IN_ADDR_A	   (CAS_OUT_ADDR_LOCAL),       
+                        .CAS_IN_BWE_A	   (CAS_OUT_BWE_LOCAL),       
+                        .CAS_IN_DBITERR_A  (CAS_OUT_DBITERR_LOCAL),
+                        .CAS_IN_DIN_A	   (CAS_OUT_DIN_LOCAL),       
+                        .CAS_IN_DOUT_A	   (CAS_OUT_DOUT_LOCAL),       
+                        .CAS_IN_EN_A	   (CAS_OUT_EN_LOCAL), 
+                        .CAS_IN_RDACCESS_A (CAS_OUT_RDACCESS_LOCAL),
+                        .CAS_IN_RDB_WR_A   (CAS_OUT_RDB_WR_LOCAL),       	
+	                .CAS_IN_SBITERR_A  (CAS_OUT_SBITERR_LOCAL),
+
+			// clocking and control
+			.CLK(clk),
+			.EN_A(ce),
+			.EN_B(ce),
+			.OREG_CE_B(1'b1),
+			.OREG_ECC_CE_B(1'b0),
+			.RST_A(rst),
+			.RST_B(rst),
+			.SLEEP(1'b0)
+		);
+
+//pc_o_valid
+always@(posedge clk) begin
+  if (rst) begin
+    pc_o_valid_tmp     <= 'b0;
+    pc_o_valid_tmp_r   <= 'b0;
+    pc_o_valid_tmp_r2  <= 'b0;
+    pc_o_valid_tmp_r3  <= 'b0;
+    pc_o_valid_tmp_r4  <= 'b0;
+    pc_o_valid_tmp_r5  <= 'b0;
+    pc_o_valid_tmp_r6  <= 'b0;
+    pc_o_valid_tmp_r7  <= 'b0;
+    pc_o_valid_tmp_r8  <= 'b0;
+    pc_o_valid_tmp_r9  <= 'b0;
+    pc_o_valid_tmp_r10 <= 'b0;
+    pc_o_valid_tmp_r11 <= 'b0;
+    pc_o_valid_tmp_r12 <= 'b0;
+    pc_o_valid_tmp_r13 <= 'b0;
+    pc_o_valid_tmp_r14 <= 'b0;
+    pc_o_valid_tmp_r15 <= 'b0;
+    pc_o_valid_tmp_r16 <= 'b0;
+  end else begin
+    pc_o_valid_tmp     <= p_state[3];
+    pc_o_valid_tmp_r   <= pc_o_valid_tmp;
+    pc_o_valid_tmp_r2  <= pc_o_valid_tmp_r;
+    pc_o_valid_tmp_r3  <= pc_o_valid_tmp_r2;
+    pc_o_valid_tmp_r4  <= pc_o_valid_tmp_r3;
+    pc_o_valid_tmp_r5  <= pc_o_valid_tmp_r4;
+    pc_o_valid_tmp_r6  <= pc_o_valid_tmp_r5;
+    pc_o_valid_tmp_r7  <= pc_o_valid_tmp_r6;
+    pc_o_valid_tmp_r8  <= pc_o_valid_tmp_r7;
+    pc_o_valid_tmp_r9  <= pc_o_valid_tmp_r8;
+    pc_o_valid_tmp_r10 <= pc_o_valid_tmp_r9;
+    pc_o_valid_tmp_r11 <= pc_o_valid_tmp_r10;
+    pc_o_valid_tmp_r12 <= pc_o_valid_tmp_r11;
+    pc_o_valid_tmp_r13 <= pc_o_valid_tmp_r12;
+    pc_o_valid_tmp_r14 <= pc_o_valid_tmp_r13;
+    pc_o_valid_tmp_r15 <= pc_o_valid_tmp_r14;
+    pc_o_valid_tmp_r16 <= pc_o_valid_tmp_r15;
+  end
+end
+
 generate if (NUMBER_OF_REG == 1) begin : wr_en1
   always@(posedge clk) begin
     if (rst) begin
-      ce_dsp <= 1'b0;
+      data_valid <= 1'b0;
     end else begin
-      ce_dsp <= p_state[1];
+      data_valid <= pc_o_valid_tmp_r16;
     end
   end
-
-  assign rd_data1_tmp = rd_data1;
-  assign rd_data2_tmp = rd_data2;
-  assign rd_data3_tmp = rd_data3;
-  assign rd_data4_tmp = rd_data4;
-  assign rd_data5_tmp = rd_data5;
-  assign rd_data6_tmp = rd_data6;
-  assign rd_data7_tmp = rd_data7;
-  assign rd_data8_tmp = rd_data8;
-  assign rd_data9_tmp = rd_data9;
 end endgenerate
 
 generate if (NUMBER_OF_REG == 2) begin : wr_en2
   always@(posedge clk) begin
     if (rst) begin
-      ce_dsp_opr1 <= 1'b0;
-      ce_dsp <= 1'b0;
+      pc_o_valid_tmp_r17 <= 1'b0;
+      pc_o_valid_tmp_r18 <= 1'b0;
+      data_valid        <= 1'b0;
     end else begin
-      ce_dsp_opr1 <= p_state[1];
-      ce_dsp <= ce_dsp_opr1;
+      pc_o_valid_tmp_r17 <= pc_o_valid_tmp_r16;
+      pc_o_valid_tmp_r18 <= pc_o_valid_tmp_r17;
+      data_valid        <= pc_o_valid_tmp_r18;
     end
   end
-  assign rd_data1_tmp = rd_data1_r1;
-  assign rd_data2_tmp = rd_data2_r1;
-  assign rd_data3_tmp = rd_data3_r1;
-  assign rd_data4_tmp = rd_data4_r1;
-  assign rd_data5_tmp = rd_data5_r1;
-  assign rd_data6_tmp = rd_data6_r1;
-  assign rd_data7_tmp = rd_data7_r1;
-  assign rd_data8_tmp = rd_data8_r1;
-  assign rd_data9_tmp = rd_data9_r1;
-
 end endgenerate
 
 generate if (NUMBER_OF_REG == 3) begin : wr_en3
   always@(posedge clk) begin
     if (rst) begin
-      ce_dsp_opr2 <= 1'b0;
-      ce_dsp_opr1 <= 1'b0;
-      ce_dsp <= 1'b0;
+      pc_o_valid_tmp_r17 <= 1'b0;
+      pc_o_valid_tmp_r18 <= 1'b0;
+      pc_o_valid_tmp_r19 <= 1'b0;
+      data_valid        <= 1'b0;
     end else begin
-      ce_dsp_opr2 <= p_state[1];
-      ce_dsp_opr1 <= ce_dsp_opr2;
-      ce_dsp <= ce_dsp_opr1;
+      pc_o_valid_tmp_r17 <= pc_o_valid_tmp_r16;
+      pc_o_valid_tmp_r18 <= pc_o_valid_tmp_r17;
+      pc_o_valid_tmp_r19 <= pc_o_valid_tmp_r18;
+      pc_o_valid_tmp_r20 <= pc_o_valid_tmp_r19;
+      data_valid        <= pc_o_valid_tmp_r20;
     end
   end
-  assign rd_data1_tmp = rd_data1_r2;
-  assign rd_data2_tmp = rd_data2_r2;
-  assign rd_data3_tmp = rd_data3_r2;
-  assign rd_data4_tmp = rd_data4_r2;
-  assign rd_data5_tmp = rd_data5_r2;
-  assign rd_data6_tmp = rd_data6_r2;
-  assign rd_data7_tmp = rd_data7_r2;
-  assign rd_data8_tmp = rd_data8_r2;
-  assign rd_data9_tmp = rd_data9_r2;
-
 end endgenerate
 
-////////////////////////////////////////////////////////
-
 always@(posedge clk) begin
-  rd_data1_r1 <= rd_data1;
-  rd_data2_r1 <= rd_data2;
-  rd_data3_r1 <= rd_data3;
-  rd_data4_r1 <= rd_data4;
-  rd_data5_r1 <= rd_data5;
-  rd_data6_r1 <= rd_data6;
-  rd_data7_r1 <= rd_data7;
-  rd_data8_r1 <= rd_data8;
-  rd_data9_r1 <= rd_data9;
-  rd_data1_r2 <= rd_data1_r1;
-  rd_data2_r2 <= rd_data2_r1;
-  rd_data3_r2 <= rd_data3_r1;
-  rd_data4_r2 <= rd_data4_r1;
-  rd_data5_r2 <= rd_data5_r1;
-  rd_data6_r2 <= rd_data6_r1;
-  rd_data7_r2 <= rd_data7_r1;
-  rd_data8_r2 <= rd_data8_r1;
-  rd_data9_r2 <= rd_data9_r1;
-end
-
-always@(posedge clk) begin
-  if (rst) begin
-    ce_dsp_r  <= 1'b0;
-    ce_dsp_2r <= 1'b0;
-  end else begin 
-    ce_dsp_r  <= ce_dsp;
-    ce_dsp_2r <= ce_dsp_r;
+  if (rst) data_valid_tog <= 1'b0;
+  else begin
+    if (data_valid) data_valid_tog <= ~data_valid_tog;
+    else data_valid_tog <= 1'b0;
   end
 end
 
-always@(*) begin
-  ce_dsp_1 <= ce_dsp_2r || ce_dsp_r;
+//2 reg
+always@(posedge clk) begin
+  data_valid_r      <= data_valid;
+  data_valid_2r     <= data_valid_r;
+  data_valid_tog_r  <= data_valid_tog;
+  data_valid_tog_2r <= data_valid_tog_r;
+  data_valid_tog_3r <= data_valid_tog_2r;
+  uram2_wr_en       <= data_valid_tog_3r;
 end
 
+//temp rd/wr addr
 always@(posedge clk) begin
-  if (rst) ce_dsp_2 <= 1'b0;
-  else ce_dsp_2     <= ce_dsp_1;
-end
-
-assign ce_tmp = {ce_dsp_2, ce_dsp_1, ce_dsp_r};
-
-always@(posedge clk) begin
-  if (rst) begin
-    master_rdaddr <= 14'd0;
-  end else if (p_state[1]) begin
-    master_rdaddr <= master_rdaddr + 14'd16;  
+  if (rst) rd_addr_temp <= {URAM_A_W{1'b0}};
+  else begin
+    if (data_valid && ~data_valid_tog) rd_addr_temp <= rd_addr_temp + 'd16;
   end
 end
 
 always@(posedge clk) begin
+  if (rst) wr_addr_temp <= {URAM_A_W{1'b0}};
+  else begin
+    if (data_valid_2r && data_valid_tog_2r) wr_addr_temp <= wr_addr_temp + 'd16;
+  end
+end
+
+// uram read addr internal
+always@(posedge clk) begin
+  if (rst) uram_rd_addr_internal <= {URAM_A_W{1'b0}};
+  else begin
+    if (data_valid_tog_2r)  uram_rd_addr_internal <= wr_addr_temp;
+    else uram_rd_addr_internal <= rd_addr_temp;
+  end
+end
+
+// uram2 rd addr
+always@(posedge clk) begin
+  if (rst) uram2_rd_addr <= {URAM_A_W{1'b0}};
+  else begin
+    if (read_en_external)  uram2_rd_addr <= uram2_rd_addr_external;
+    else uram2_rd_addr <= uram_rd_addr_internal;
+  end
+end
+
+//register data out from convolution unit 3-times
+always@(posedge clk) begin
+  data_out_conv_r1 <= {data_out_conv2, data_out_conv1};
+  data_out_conv_r2 <= data_out_conv_r1;
+  data_out_conv_r3 <= data_out_conv_r2;
+  data_out_conv_r4 <= data_out_conv_r3;
+  uram2_rd_data_r  <= uram2_rd_data_tmp;
+end
+
+// 8-parallel adder modules
+always@(posedge clk) begin
+add1 = data_out_conv_r4[7:0]   + uram2_rd_data_r[7:0];
+add2 = data_out_conv_r4[15:8]  + uram2_rd_data_r[15:8];
+add3 = data_out_conv_r4[23:16] + uram2_rd_data_r[23:16];
+add4 = data_out_conv_r4[31:24] + uram2_rd_data_r[31:24];
+add5 = data_out_conv_r3[7:0]   + uram2_rd_data_r[39:32];
+add6 = data_out_conv_r3[15:8]  + uram2_rd_data_r[47:40];
+add7 = data_out_conv_r3[23:16] + uram2_rd_data_r[55:48];
+add8 = data_out_conv_r3[31:24] + uram2_rd_data_r[63:56];
+end
+
+assign uram2_rd_data = uram2_rd_data_r;
+
+always@(posedge clk) begin
   if (rst) begin
-    master_rdaddr_r  <= 14'd0;
-    master_rdaddr_2r <= 14'd0;
-    master_rdaddr_3r <= 14'd0;
-    master_rdaddr_4r <= 14'd0;
-    master_rdaddr_5r <= 14'd0;
-    master_rdaddr_6r <= 14'd0;
-    master_rdaddr_7r <= 14'd0;
+    uram2_wr_data <= {URAM_D_W{1'b0}};
   end else begin
-    master_rdaddr_r  <= master_rdaddr;
-    master_rdaddr_2r <= master_rdaddr_r;
-    master_rdaddr_3r <= master_rdaddr_2r;
-    master_rdaddr_4r <= master_rdaddr_3r;
-    master_rdaddr_5r <= master_rdaddr_4r;
-    master_rdaddr_6r <= master_rdaddr_5r;
-    master_rdaddr_7r <= master_rdaddr_6r;
+    uram2_wr_data <= {8'd0, add8, add7, add6, add5, add4, add3, add2,add1}; //writing 8-MSBs
   end
 end
 
-// 9 BRAMs
-		(* dont_touch = "true" *)RAMB18E2 #(
-			.DOA_REG(1),.DOB_REG(1),
-			.CASCADE_ORDER_A("FIRST"),.CASCADE_ORDER_B("NONE"),
-			.CLOCK_DOMAINS("COMMON"),
-                        .WRITE_MODE_A("WRITE_FIRST"), .WRITE_MODE_B("WRITE_FIRST"),
-			.WRITE_WIDTH_A(18), .WRITE_WIDTH_B(18),
-			.READ_WIDTH_A(18), .READ_WIDTH_B(18))
-        	bram1 (
-	                .ADDRARDADDR(master_rdaddr),
-        	        .ADDRBWRADDR(b1_wr_addr),
-	                .ADDRENA(1'b1),
-	                .ADDRENB(1'b1),
-	                .WEA({2{1'b0}}),
-	                .WEBWE({4{b1_wr_en}}),
-	                .CASDOUTA(casc_data_b1[15:0]), 
-	                .CASDOUTPA(casc_data_b1[17:16]), 
-	                .DINBDIN({8'd0, b1_wr_data}), 
-	                .DINPBDINP(2'd0),
-                        .CASDIMUXA('b0), 
-                        .CASDIMUXB('b0), 
-	                .DOUTADOUT(rd_data1), 
-	                .CLKARDCLK(clk),
-	                .CLKBWRCLK(clk),
-	                .ENARDEN(ce),
-	                .ENBWREN(ce),
-	                .REGCEAREGCE(ce),
-	                .REGCEB(ce),
-	                .RSTRAMARSTRAM(rst),
-	                .RSTRAMB(rst),
-	                .RSTREGARSTREG(rst),
-	                .RSTREGB(rst) );
+//kernel clock enable and addressing
+always@(posedge clk) begin
+  if (rst) begin
+    k_state <= k_RST_s;
+  end else begin
+    case (k_state)
+      k_RST_s : if (ld_new_kernel) k_state <= k_HIGH1_s;
+      k_HIGH1_s : k_state <= k_HIGH2_s;
+      k_HIGH2_s : k_state <= k_HIGH3_s;
+      k_HIGH3_s : k_state <= k_HIGH4_s;
+      k_HIGH4_s : k_state <= k_HIGH5_s;
+      k_HIGH5_s : k_state <= k_HIGH6_s;
+      k_HIGH6_s : k_state <= k_HIGH7_s;
+      k_HIGH7_s : k_state <= k_HIGH8_s;
+      k_HIGH8_s : k_state <= k_HIGH9_s;
+      default : k_state <= k_RST_s;
+    endcase
+  end
+end
+//address generator
+always@(posedge clk) begin
+  if (rst) begin
+    rdaddr_b <= 'b0;
+  end else begin
+    if ((k_state[0] && ld_new_kernel) || k_state[1] || k_state[2] || k_state[3] || k_state[4] || k_state[5] || k_state[6] || k_state[7] || k_state[8])
+      rdaddr_b <= rdaddr_b + 'd16;
+  end
+end
 
-		(* dont_touch = "true" *)RAMB18E2 #(
-			.DOA_REG(1),.DOB_REG(1),
-			.CASCADE_ORDER_A("FIRST"),.CASCADE_ORDER_B("NONE"),
-			.CLOCK_DOMAINS("COMMON"),
-                        .WRITE_MODE_A("WRITE_FIRST"), .WRITE_MODE_B("WRITE_FIRST"),
-			.WRITE_WIDTH_A(18), .WRITE_WIDTH_B(18),
-			.READ_WIDTH_A(18), .READ_WIDTH_B(18))
-        	bram2 (
-	                .ADDRARDADDR(master_rdaddr),
-        	        .ADDRBWRADDR(b2_wr_addr),
-	                .ADDRENA(1'b1),
-	                .ADDRENB(1'b1),
-	                .WEA({2{1'b0}}),
-	                .WEBWE({4{b2_wr_en}}),
-	                .CASDOUTA(casc_data_b2[15:0]), 
-	                .CASDOUTPA(casc_data_b2[17:16]), 
-	                .DINBDIN({8'd0, b2_wr_data}), 
-	                .DINPBDINP(2'd0),
-                        .CASDIMUXA('b0), 
-                        .CASDIMUXB('b0), 
-	                .DOUTADOUT(rd_data2), 
-	                .CLKARDCLK(clk),
-	                .CLKBWRCLK(clk),
-	                .ENARDEN(ce),
-	                .ENBWREN(ce),
-	                .REGCEAREGCE(ce),
-	                .REGCEB(ce),
-	                .RSTRAMARSTRAM(rst),
-	                .RSTRAMB(rst),
-	                .RSTREGARSTREG(rst),
-	                .RSTREGB(rst) );
+always@(posedge clk) begin
+  if (k_state[1] || k_state[2] || k_state[3] || k_state[4] || k_state[5] || k_state[6] || k_state[7] || k_state[8] || k_state[9])
+    ce_b_tmp <= 1'b1;
+  else
+    ce_b_tmp <= 1'b0;
+end
 
-		(* dont_touch = "true" *)RAMB18E2 #(
-			.DOA_REG(1),.DOB_REG(1),
-			.CASCADE_ORDER_A("LAST"),.CASCADE_ORDER_B("FIRST"),
-			.CLOCK_DOMAINS("COMMON"),
-                        .WRITE_MODE_A("WRITE_FIRST"), .WRITE_MODE_B("WRITE_FIRST"),
-			.WRITE_WIDTH_A(18), .WRITE_WIDTH_B(18),
-			.READ_WIDTH_A(18), .READ_WIDTH_B(18))
-        	bram3 (
-	                .ADDRARDADDR(b3_wr_addr),
-        	        .ADDRBWRADDR(master_rdaddr_r),
-	                .ADDRENA(1'b1),
-	                .ADDRENB(1'b1),
-	                .WEA({2{b3_wr_en}}),
-	                .WEBWE({4{1'b0}}),
-	                .CASDOUTB(casc_data_b3[15:0]), 
-	                .CASDOUTPB(casc_data_b3[17:16]), 
-                        .CASDINA(casc_data_b1[15:0]),
-                        .CASDINPA(casc_data_b1[17:16]),
-                        .CASDIMUXB(1'b0),
-                        .CASDIMUXA(1'b1),
-	                .DOUTBDOUT(rd_data3), 
-	                .CLKARDCLK(clk),
-	                .CLKBWRCLK(clk),
-	                .ENARDEN(ce),
-	                .ENBWREN(ce),
-	                .REGCEAREGCE(ce),
-	                .REGCEB(ce),
-	                .RSTRAMARSTRAM(rst),
-	                .RSTRAMB(rst),
-	                .RSTREGARSTREG(rst),
-	                .RSTREGB(rst) );
-
-		(* dont_touch = "true" *)RAMB18E2 #(
-			.DOA_REG(1),.DOB_REG(1),
-			.CASCADE_ORDER_A("LAST"),.CASCADE_ORDER_B("FIRST"),
-			.CLOCK_DOMAINS("COMMON"),
-                        .WRITE_MODE_A("WRITE_FIRST"), .WRITE_MODE_B("WRITE_FIRST"),
-			.WRITE_WIDTH_A(18), .WRITE_WIDTH_B(18),
-			.READ_WIDTH_A(18), .READ_WIDTH_B(18))
-        	bram4 (
-	                .ADDRARDADDR(b4_wr_addr),
-        	        .ADDRBWRADDR(master_rdaddr_3r),
-	                .ADDRENA(1'b1),
-	                .ADDRENB(1'b1),
-	                .WEA({2{b4_wr_en}}),
-	                .WEBWE({4{1'b0}}),
-	                .CASDOUTB(casc_data_b4[15:0]), 
-	                .CASDOUTPB(casc_data_b4[17:16]), 
-                        .CASDINA(casc_data_b2[15:0]),
-                        .CASDINPA(casc_data_b2[17:16]),
-                        .CASDIMUXB(1'b0),
-                        .CASDIMUXA(1'b1),
-	                .DOUTBDOUT(rd_data4), 
-	                .CLKARDCLK(clk),
-	                .CLKBWRCLK(clk),
-	                .ENARDEN(ce),
-	                .ENBWREN(ce),
-	                .REGCEAREGCE(ce),
-	                .REGCEB(ce),
-	                .RSTRAMARSTRAM(rst),
-	                .RSTRAMB(rst),
-	                .RSTREGARSTREG(rst),
-	                .RSTREGB(rst) );
-
-		(* dont_touch = "true" *)RAMB18E2 #(
-			.DOA_REG(1),.DOB_REG(1),
-			.CASCADE_ORDER_A("FIRST"),.CASCADE_ORDER_B("LAST"),
-			.CLOCK_DOMAINS("COMMON"),
-                        .WRITE_MODE_A("WRITE_FIRST"), .WRITE_MODE_B("WRITE_FIRST"),
-			.WRITE_WIDTH_A(18), .WRITE_WIDTH_B(18),
-			.READ_WIDTH_A(18), .READ_WIDTH_B(18))
-        	bram5 (
-	                .ADDRARDADDR(master_rdaddr_3r),
-        	        .ADDRBWRADDR(b5_wr_addr),
-	                .ADDRENA(1'b1),
-	                .ADDRENB(1'b1),
-	                .WEA({2{1'b0}}),
-	                .WEBWE({4{b5_wr_en}}),
-	                .CASDOUTA(casc_data_b5[15:0]), 
-	                .CASDOUTPA(casc_data_b5[17:16]), 
-                        .CASDINB(casc_data_b3[15:0]),
-                        .CASDINPB(casc_data_b3[17:16]),
-                        .CASDIMUXB(1'b1),
-                        .CASDIMUXA(1'b0),
-	                .DOUTADOUT(rd_data5), 
-	                .CLKARDCLK(clk),
-	                .CLKBWRCLK(clk),
-	                .ENARDEN(ce),
-	                .ENBWREN(ce),
-	                .REGCEAREGCE(ce),
-	                .REGCEB(ce),
-	                .RSTRAMARSTRAM(rst),
-	                .RSTRAMB(rst),
-	                .RSTREGARSTREG(rst),
-	                .RSTREGB(rst) );
-
-		(* dont_touch = "true" *)RAMB18E2 #(
-			.DOA_REG(1),.DOB_REG(1),
-			.CASCADE_ORDER_A("FIRST"),.CASCADE_ORDER_B("LAST"),
-			.CLOCK_DOMAINS("COMMON"),
-                        .WRITE_MODE_A("WRITE_FIRST"), .WRITE_MODE_B("WRITE_FIRST"),
-			.WRITE_WIDTH_A(18), .WRITE_WIDTH_B(18),
-			.READ_WIDTH_A(18), .READ_WIDTH_B(18))
-        	bram6 (
-	                .ADDRARDADDR(master_rdaddr_4r),
-        	        .ADDRBWRADDR(b6_wr_addr),
-	                .ADDRENA(1'b1),
-	                .ADDRENB(1'b1),
-	                .WEA({2{1'b0}}),
-	                .WEBWE({4{b6_wr_en}}),
-	                .CASDOUTA(casc_data_b6[15:0]), 
-	                .CASDOUTPA(casc_data_b6[17:16]), 
-                        .CASDINB(casc_data_b4[15:0]),
-                        .CASDINPB(casc_data_b4[17:16]),
-                        .CASDIMUXB(1'b1),
-                        .CASDIMUXA(1'b0),
-	                .DOUTADOUT(rd_data6), 
-	                .CLKARDCLK(clk),
-	                .CLKBWRCLK(clk),
-	                .ENARDEN(ce),
-	                .ENBWREN(ce),
-	                .REGCEAREGCE(ce),
-	                .REGCEB(ce),
-	                .RSTRAMARSTRAM(rst),
-	                .RSTRAMB(rst),
-	                .RSTREGARSTREG(rst),
-	                .RSTREGB(rst) );
-
-		(* dont_touch = "true" *)RAMB18E2 #(
-			.DOA_REG(1),.DOB_REG(1),
-			.CASCADE_ORDER_A("LAST"),.CASCADE_ORDER_B("FIRST"),
-			.CLOCK_DOMAINS("COMMON"),
-                        .WRITE_MODE_A("WRITE_FIRST"), .WRITE_MODE_B("WRITE_FIRST"),
-			.WRITE_WIDTH_A(18), .WRITE_WIDTH_B(18),
-			.READ_WIDTH_A(18), .READ_WIDTH_B(18))
-        	bram7 (
-	                .ADDRARDADDR(b7_wr_addr),
-        	        .ADDRBWRADDR(master_rdaddr_6r),
-	                .ADDRENA(1'b1),
-	                .ADDRENB(1'b1),
-	                .WEA({2{b7_wr_en}}),
-	                .WEBWE({4{1'b0}}),
-	                .CASDOUTB(casc_data_b7[15:0]), 
-	                .CASDOUTPB(casc_data_b7[17:16]), 
-                        .CASDINA(casc_data_b5[15:0]),
-                        .CASDINPA(casc_data_b5[17:16]),
-                        .CASDIMUXB(1'b0),
-                        .CASDIMUXA(1'b1),
-	                .DOUTBDOUT(rd_data7), 
-	                .CLKARDCLK(clk),
-	                .CLKBWRCLK(clk),
-	                .ENARDEN(ce),
-	                .ENBWREN(ce),
-	                .REGCEAREGCE(ce),
-	                .REGCEB(ce),
-	                .RSTRAMARSTRAM(rst),
-	                .RSTRAMB(rst),
-	                .RSTREGARSTREG(rst),
-	                .RSTREGB(rst) );
-
-
-		(* dont_touch = "true" *)RAMB18E2 #(
-			.DOA_REG(1),.DOB_REG(1),
-			.CASCADE_ORDER_A("LAST"),.CASCADE_ORDER_B("NONE"),
-			.CLOCK_DOMAINS("COMMON"),
-                        .WRITE_MODE_A("WRITE_FIRST"), .WRITE_MODE_B("WRITE_FIRST"),
-			.WRITE_WIDTH_A(18), .WRITE_WIDTH_B(18),
-			.READ_WIDTH_A(18), .READ_WIDTH_B(18))
-        	bram8 (
-	                .ADDRARDADDR(b8_wr_addr),
-        	        .ADDRBWRADDR(master_rdaddr_6r),
-	                .ADDRENA(1'b1),
-	                .ADDRENB(1'b1),
-	                .WEA({2{b8_wr_en}}),
-	                .WEBWE({4{1'b0}}),
-                        .CASDINA(casc_data_b6[15:0]),
-                        .CASDINPA(casc_data_b6[17:16]),
-                        .CASDIMUXB(1'b0),
-                        .CASDIMUXA(1'b1),
-	                .DOUTBDOUT(rd_data8), 
-	                .CLKARDCLK(clk),
-	                .CLKBWRCLK(clk),
-	                .ENARDEN(ce),
-	                .ENBWREN(ce),
-	                .REGCEAREGCE(ce),
-	                .REGCEB(ce),
-	                .RSTRAMARSTRAM(rst),
-	                .RSTRAMB(rst),
-	                .RSTREGARSTREG(rst),
-	                .RSTREGB(rst) );
-
-		(* dont_touch = "true" *)RAMB18E2 #(
-			.DOA_REG(1),.DOB_REG(1),
-			.CASCADE_ORDER_A("NONE"),.CASCADE_ORDER_B("LAST"),
-			.CLOCK_DOMAINS("COMMON"),
-                        .WRITE_MODE_A("WRITE_FIRST"), .WRITE_MODE_B("WRITE_FIRST"),
-			.WRITE_WIDTH_A(18), .WRITE_WIDTH_B(18),
-			.READ_WIDTH_A(18), .READ_WIDTH_B(18))
-        	bram9 (
-	                .ADDRARDADDR(master_rdaddr_7r),
-        	        .ADDRBWRADDR(b9_wr_addr),
-	                .ADDRENA(1'b1),
-	                .ADDRENB(1'b1),
-	                .WEA({2{1'b0}}),
-	                .WEBWE({4{b9_wr_en}}),
-                        .CASDINB(casc_data_b7[15:0]),
-                        .CASDINPB(casc_data_b7[17:16]),
-                        .CASDIMUXB(1'b1),
-                        .CASDIMUXA(1'b0),
-	                .DOUTADOUT(rd_data9), 
-	                .CLKARDCLK(clk),
-	                .CLKBWRCLK(clk),
-	                .ENARDEN(ce),
-	                .ENBWREN(ce),
-	                .REGCEAREGCE(ce),
-	                .REGCEB(ce),
-	                .RSTRAMARSTRAM(rst),
-	                .RSTRAMB(rst),
-	                .RSTREGARSTREG(rst),
-	                .RSTREGB(rst) );
-
-// conv blocks
-(* dont_touch = "true" *) conv #(
+ (* dont_touch = "true" *) dsp_conv #(
 	 .A_W (A_W)
 	,.M_W (M_W)
-    ,.EXP_WIDTH(EXP_WIDTH)
-    ,.MANT_WIDTH(MANT_WIDTH)
-	,.D_W (D_W)
 	,.URAM_D_W (URAM_D_W)
 	,.URAM_A_W (URAM_A_W)
         ,.NUMBER_OF_REG (NUMBER_OF_REG)
-        ,.CASCADE_ORDER_A ("FIRST")
-        ,.SELF_ADDR_A (11'h0)
 )
 conv1 (
-         .clk           (clk)
-        ,.rst           (rst)
-        ,.ce            (ce          ) 
-        ,.ce_tmp        (ce_tmp      )     
-        ,.bram_data1    (rd_data1_tmp[7:0])
-        ,.bram_data2    (rd_data2_tmp[7:0])
-        ,.bram_data3    (rd_data3_tmp[7:0])
-        ,.bram_data4    (rd_data4_tmp[7:0])
-        ,.bram_data5    (rd_data5_tmp[7:0])
-        ,.bram_data6    (rd_data6_tmp[7:0])
-        ,.bram_data7    (rd_data7_tmp[7:0])
-        ,.bram_data8    (rd_data8_tmp[7:0])
-        ,.bram_data9    (rd_data9_tmp[7:0])
-        ,.uram_rd_addr  (master_rdaddr)
-        ,.uram_wr_addr  (uram1_wr_addr)
-        ,.uram_wr_data  (uram1_wr_data)
-        ,.uram_wr_en    (uram1_wr_en  )
-        ,.bram_rd_addr_external (bram1_rd_addr)
-        ,.bram_rd_en_external (bram1_rd_en)
-        ,.bram_rd_data  (bram1_rd_data)
-        ,.CAS_OUT_ADDR    (CAS_OUT_ADDR_LOCAL1)
-        ,.CAS_OUT_BWE	    (CAS_OUT_BWE_LOCAL1)       
-        ,.CAS_OUT_DBITERR (CAS_OUT_DBITERR_LOCAL1)
-        ,.CAS_OUT_DIN	    (CAS_OUT_DIN_LOCAL1)       
-        ,.CAS_OUT_DOUT   (CAS_OUT_DOUT_LOCAL1)       
-        ,.CAS_OUT_EN	   (CAS_OUT_EN_LOCAL1)       
-        ,.CAS_OUT_RDACCESS (CAS_OUT_RDACCESS_LOCAL1)
-        ,.CAS_OUT_RDB_WR   (CAS_OUT_RDB_WR_LOCAL1)
-        ,.CAS_OUT_SBITERR  (CAS_OUT_SBITERR_LOCAL1)
-        ,.CAS_IN_ADDR	   (CAS_IN_ADDR)       
-        ,.CAS_IN_BWE	   (CAS_IN_BWE)       
-        ,.CAS_IN_DBITERR  (CAS_IN_DBITERR)
-        ,.CAS_IN_DIN	   (CAS_IN_DIN)       
-        ,.CAS_IN_DOUT	   (CAS_IN_DOUT)       
-        ,.CAS_IN_EN	   (CAS_IN_EN) 
-        ,.CAS_IN_RDACCESS (CAS_IN_RDACCESS)
-        ,.CAS_IN_RDB_WR   (CAS_IN_RDB_WR)       	
-        ,.CAS_IN_SBITERR  (CAS_IN_SBITERR)
-
+    .clk        (clk)
+   ,.rst        (rst)
+   ,.ce         (ce)
+   ,.ce_b_in    (ce_b_tmp)
+   ,.ce_dsp     (ce_dsp)
+   ,.knl_b_wraddr (krnl_bram1_wraddr)
+   ,.knl_b_wrdata (krnl_bram1_wrdata)
+   ,.knl_b_wren   (krnl_bram1_wren)
+   ,.b1_wr_addr (b1_wr_addr) 
+   ,.b1_wr_en   (b1_wr_en)
+   ,.b2_wr_addr (b2_wr_addr)
+   ,.b2_wr_en   (b2_wr_en)
+   ,.b3_wr_addr (b3_wr_addr)
+   ,.b3_wr_en   (b3_wr_en)
+   ,.b1_rd_addr (b1_rd_addr)
+   ,.b2_rd_addr (b2_rd_addr)
+   ,.b3_rd_addr (b3_rd_addr)
+   ,.rdaddr_b   (rdaddr_b) 
+   ,.data_in    (uram_rd_data_r[15:0])
+   ,.data_out   (data_out_conv1)
 );
 
-(* dont_touch = "true" *) conv #(
+//assign data_out_conv2 = 'b0;
+
+ (* dont_touch = "true" *) dsp_conv #(
 	 .A_W (A_W)
 	,.M_W (M_W)
-	,.D_W (D_W),.EXP_WIDTH(EXP_WIDTH)
-    ,.MANT_WIDTH(MANT_WIDTH)
 	,.URAM_D_W (URAM_D_W)
 	,.URAM_A_W (URAM_A_W)
         ,.NUMBER_OF_REG (NUMBER_OF_REG)
-        ,.CASCADE_ORDER_A ("MIDDLE")
-        ,.SELF_ADDR_A (11'h1)
 )
 conv2 (
-         .clk           (clk)
-        ,.rst           (rst)
-        ,.ce            (ce          ) 
-        ,.ce_tmp        (ce_tmp      )     
-        ,.bram_data1    (rd_data1_tmp[7:0])
-        ,.bram_data2    (rd_data2_tmp[7:0])
-        ,.bram_data3    (rd_data3_tmp[7:0])
-        ,.bram_data4    (rd_data4_tmp[7:0])
-        ,.bram_data5    (rd_data5_tmp[7:0])
-        ,.bram_data6    (rd_data6_tmp[7:0])
-        ,.bram_data7    (rd_data7_tmp[7:0])
-        ,.bram_data8    (rd_data8_tmp[7:0])
-        ,.bram_data9    (rd_data9_tmp[7:0])
-        ,.uram_rd_addr  (master_rdaddr)
-        ,.uram_wr_addr  (uram2_wr_addr)
-        ,.uram_wr_data  (uram2_wr_data)
-        ,.uram_wr_en    (uram2_wr_en  )
-        ,.bram_rd_addr_external (bram2_rd_addr)
-        ,.bram_rd_en_external (bram2_rd_en)
-        ,.bram_rd_data  (bram2_rd_data)
-        ,.CAS_OUT_ADDR    (CAS_OUT_ADDR_LOCAL2)
-        ,.CAS_OUT_BWE	    (CAS_OUT_BWE_LOCAL2)       
-        ,.CAS_OUT_DBITERR (CAS_OUT_DBITERR_LOCAL2)
-        ,.CAS_OUT_DIN	    (CAS_OUT_DIN_LOCAL2)       
-        ,.CAS_OUT_DOUT   (CAS_OUT_DOUT_LOCAL2)       
-        ,.CAS_OUT_EN	   (CAS_OUT_EN_LOCAL2)       
-        ,.CAS_OUT_RDACCESS (CAS_OUT_RDACCESS_LOCAL2)
-        ,.CAS_OUT_RDB_WR   (CAS_OUT_RDB_WR_LOCAL2)
-        ,.CAS_OUT_SBITERR  (CAS_OUT_SBITERR_LOCAL2)
-        ,.CAS_IN_ADDR	   (CAS_OUT_ADDR_LOCAL1)       
-        ,.CAS_IN_BWE	   (CAS_OUT_BWE_LOCAL1)       
-        ,.CAS_IN_DBITERR  (CAS_OUT_DBITERR_LOCAL1)
-        ,.CAS_IN_DIN	   (CAS_OUT_DIN_LOCAL1)       
-        ,.CAS_IN_DOUT	   (CAS_OUT_DOUT_LOCAL1)       
-        ,.CAS_IN_EN	   (CAS_OUT_EN_LOCAL1) 
-        ,.CAS_IN_RDACCESS (CAS_OUT_RDACCESS_LOCAL1)
-        ,.CAS_IN_RDB_WR   (CAS_OUT_RDB_WR_LOCAL1)	
-        ,.CAS_IN_SBITERR  (CAS_OUT_SBITERR_LOCAL1)
-
-);
-
-(* dont_touch = "true" *) conv #(
-	 .A_W (A_W)
-	,.M_W (M_W)
-	,.D_W (D_W),.EXP_WIDTH(EXP_WIDTH)
-    ,.MANT_WIDTH(MANT_WIDTH)
-	,.URAM_D_W (URAM_D_W)
-	,.URAM_A_W (URAM_A_W)
-        ,.NUMBER_OF_REG (NUMBER_OF_REG)
-        ,.CASCADE_ORDER_A ("MIDDLE")
-        ,.SELF_ADDR_A (11'h2)
-)
-conv3 (
-         .clk           (clk)
-        ,.rst           (rst)
-        ,.ce            (ce          ) 
-        ,.ce_tmp        (ce_tmp      )     
-        ,.bram_data1    (rd_data1_tmp[7:0])
-        ,.bram_data2    (rd_data2_tmp[7:0])
-        ,.bram_data3    (rd_data3_tmp[7:0])
-        ,.bram_data4    (rd_data4_tmp[7:0])
-        ,.bram_data5    (rd_data5_tmp[7:0])
-        ,.bram_data6    (rd_data6_tmp[7:0])
-        ,.bram_data7    (rd_data7_tmp[7:0])
-        ,.bram_data8    (rd_data8_tmp[7:0])
-        ,.bram_data9    (rd_data9_tmp[7:0])
-        ,.uram_rd_addr  (master_rdaddr)
-        ,.uram_wr_addr  (uram3_wr_addr)
-        ,.uram_wr_data  (uram3_wr_data)
-        ,.uram_wr_en    (uram3_wr_en  )
-        ,.bram_rd_addr_external (bram3_rd_addr)
-        ,.bram_rd_en_external (bram3_rd_en)
-        ,.bram_rd_data  (bram3_rd_data)
-        ,.CAS_OUT_ADDR    (CAS_OUT_ADDR_LOCAL3)
-        ,.CAS_OUT_BWE	    (CAS_OUT_BWE_LOCAL3)       
-        ,.CAS_OUT_DBITERR (CAS_OUT_DBITERR_LOCAL3)
-        ,.CAS_OUT_DIN	    (CAS_OUT_DIN_LOCAL3)       
-        ,.CAS_OUT_DOUT   (CAS_OUT_DOUT_LOCAL3)       
-        ,.CAS_OUT_EN	   (CAS_OUT_EN_LOCAL3)       
-        ,.CAS_OUT_RDACCESS (CAS_OUT_RDACCESS_LOCAL3)
-        ,.CAS_OUT_RDB_WR   (CAS_OUT_RDB_WR_LOCAL3)
-        ,.CAS_OUT_SBITERR  (CAS_OUT_SBITERR_LOCAL3)
-        ,.CAS_IN_ADDR	   (CAS_OUT_ADDR_LOCAL2)       
-        ,.CAS_IN_BWE	   (CAS_OUT_BWE_LOCAL2)       
-        ,.CAS_IN_DBITERR  (CAS_OUT_DBITERR_LOCAL2)
-        ,.CAS_IN_DIN	   (CAS_OUT_DIN_LOCAL2)       
-        ,.CAS_IN_DOUT	   (CAS_OUT_DOUT_LOCAL2)       
-        ,.CAS_IN_EN	   (CAS_OUT_EN_LOCAL2) 
-        ,.CAS_IN_RDACCESS (CAS_OUT_RDACCESS_LOCAL2)
-        ,.CAS_IN_RDB_WR   (CAS_OUT_RDB_WR_LOCAL2)	
-        ,.CAS_IN_SBITERR  (CAS_OUT_SBITERR_LOCAL2)
-
-);
-
-(* dont_touch = "true" *) conv #(
-	 .A_W (A_W)
-	,.M_W (M_W),.EXP_WIDTH(EXP_WIDTH)
-    ,.MANT_WIDTH(MANT_WIDTH)
-	,.D_W (D_W)
-	,.URAM_D_W (URAM_D_W)
-	,.URAM_A_W (URAM_A_W)
-        ,.NUMBER_OF_REG (NUMBER_OF_REG)
-        ,.CASCADE_ORDER_A ("LAST")
-        ,.SELF_ADDR_A (11'h3)
-)
-conv4 (
-         .clk           (clk)
-        ,.rst           (rst)
-        ,.ce            (ce          ) 
-        ,.ce_tmp        (ce_tmp      )     
-        ,.bram_data1    (rd_data1_tmp[7:0])
-        ,.bram_data2    (rd_data2_tmp[7:0])
-        ,.bram_data3    (rd_data3_tmp[7:0])
-        ,.bram_data4    (rd_data4_tmp[7:0])
-        ,.bram_data5    (rd_data5_tmp[7:0])
-        ,.bram_data6    (rd_data6_tmp[7:0])
-        ,.bram_data7    (rd_data7_tmp[7:0])
-        ,.bram_data8    (rd_data8_tmp[7:0])
-        ,.bram_data9    (rd_data9_tmp[7:0])
-        ,.uram_rd_addr  (master_rdaddr)
-        ,.uram_wr_addr  (uram4_wr_addr)
-        ,.uram_wr_data  (uram4_wr_data)
-        ,.uram_wr_en    (uram4_wr_en  )
-        ,.bram_rd_addr_external (bram4_rd_addr)
-        ,.bram_rd_en_external (bram4_rd_en)
-        ,.bram_rd_data  (bram4_rd_data)
-        ,.CAS_OUT_ADDR    (CAS_OUT_ADDR)
-        ,.CAS_OUT_BWE	    (CAS_OUT_BWE)       
-        ,.CAS_OUT_DBITERR (CAS_OUT_DBITERR)
-        ,.CAS_OUT_DIN	    (CAS_OUT_DIN)       
-        ,.CAS_OUT_DOUT   (CAS_OUT_DOUT)       
-        ,.CAS_OUT_EN	   (CAS_OUT_EN)       
-        ,.CAS_OUT_RDACCESS (CAS_OUT_RDACCESS)
-        ,.CAS_OUT_RDB_WR   (CAS_OUT_RDB_WR)
-        ,.CAS_OUT_SBITERR  (CAS_OUT_SBITERR)
-        ,.CAS_IN_ADDR	   (CAS_OUT_ADDR_LOCAL3)       
-        ,.CAS_IN_BWE	   (CAS_OUT_BWE_LOCAL3)       
-        ,.CAS_IN_DBITERR  (CAS_OUT_DBITERR_LOCAL3)
-        ,.CAS_IN_DIN	   (CAS_OUT_DIN_LOCAL3)       
-        ,.CAS_IN_DOUT	   (CAS_OUT_DOUT_LOCAL3)       
-        ,.CAS_IN_EN	   (CAS_OUT_EN_LOCAL3) 
-        ,.CAS_IN_RDACCESS (CAS_OUT_RDACCESS_LOCAL3)
-        ,.CAS_IN_RDB_WR   (CAS_OUT_RDB_WR_LOCAL3)	
-        ,.CAS_IN_SBITERR  (CAS_OUT_SBITERR_LOCAL3)
-
+    .clk        (clk)
+   ,.rst        (rst)
+   ,.ce         (ce)
+   ,.ce_b_in    (ce_b_tmp)
+   ,.ce_dsp     (ce_dsp)
+   ,.knl_b_wraddr (krnl_bram2_wraddr)
+   ,.knl_b_wrdata (krnl_bram2_wrdata)
+   ,.knl_b_wren   (krnl_bram2_wren)
+   ,.b1_wr_addr (b1_wr_addr) 
+   ,.b1_wr_en   (b1_wr_en)
+   ,.b2_wr_addr (b2_wr_addr)
+   ,.b2_wr_en   (b2_wr_en)
+   ,.b3_wr_addr (b3_wr_addr)
+   ,.b3_wr_en   (b3_wr_en)
+   ,.b1_rd_addr (b1_rd_addr)
+   ,.b2_rd_addr (b2_rd_addr)
+   ,.b3_rd_addr (b3_rd_addr)
+   ,.rdaddr_b   (rdaddr_b) 
+   ,.data_in    (uram_rd_data_r[31:16])
+   ,.data_out   (data_out_conv2)
 );
 
 endmodule

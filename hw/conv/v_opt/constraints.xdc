@@ -1,4 +1,4 @@
-create_clock -period 2.857 -name clk -waveform {0.000 1.428} [get_ports clk]
+create_clock -period 4.000 -name clk -waveform {0.000 2.000} [get_ports clk]
 
 #  create_pblock pblock_clustered_logic
 
