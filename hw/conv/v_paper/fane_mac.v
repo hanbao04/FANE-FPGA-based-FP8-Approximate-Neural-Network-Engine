@@ -1,3 +1,4 @@
+// after 4 cycles to get the final result
 module fane_mac#(
     parameter EXP_WIDTH     = 3,
     parameter MANT_WIDTH    = 4
@@ -6,15 +7,15 @@ module fane_mac#(
     input               rst_n,
     input               en,
 
-    // 数据 同步 输入
-    input   [7:0]       mul_a,          // 被乘数
-    input   [7:0]       mul_b,      //  乘数
+
+    input   [7:0]       mul_a,         
+    input   [7:0]       mul_b,     
     input   [7:0]       cascade_sum_in,     // pcin
 
-    // 乘累加结果输出
+
     output  [7:0]       acc_out  ,        // P
-    output  [7:0]       cascade_mula_out, // 用于级联的被乘数输出
-    output  [7:0]       cascade_mulb_out  // 用于级联
+    output  [7:0]       cascade_mula_out, 
+    output  [7:0]       cascade_mulb_out  
 );
 
 wire [7:0] fp8_product;

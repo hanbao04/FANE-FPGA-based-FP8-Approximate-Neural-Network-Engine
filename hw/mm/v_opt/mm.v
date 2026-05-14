@@ -54,8 +54,6 @@ input   [0:0]	CAS_IN_SBITERR
 
 );
 
-localparam integer ADDER_PIPE_EXTRA    = 0;
-localparam integer MAC_CHAIN_LEN       = 9;
 
 reg [2:0]                ce_a0;
 reg [2:0]                ce_a0_r1;
@@ -101,19 +99,13 @@ reg  [71:0]              uram_rd_data_r;
 reg  [71:0]              uram_rd_data_r1;
 reg  [71:0]              uram_rd_data_r2;
 reg                      bram_wr_en;
-reg                      bram_wr_en_base;
 reg [7:0]                pout_reg;
-reg [7:0]                pout_reg_base;
 reg [7:0]                pout_reg1;
 reg [7:0]                pout_reg2;
-reg [M_W-1:0]            bram_rd_data_base;
 
 wire [8:0]               ce_shift;
-wire [8:0]               ce_shift_mac;
 wire [7:0]               Ain [8:0];
-wire [7:0]               Ain_mac [8:0];
 wire [7:0]               Bin [8:0];
-wire [7:0]               Bin_mac [8:0];
 wire [8:0]               OPMODE [8:0];
 wire [7:0]              p [0:9];
 wire [7:0]              pout [0:8];
@@ -369,16 +361,16 @@ generate if (NUMBER_OF_REG == 1) begin : wr_en1
   always@(posedge clk) begin
     if (rst) begin
       pc_o_valid_tmp_r13 <= 1'b0;
-      bram_wr_en_base    <= 1'b0;
+      bram_wr_en         <= 1'b0;
     end else begin
       pc_o_valid_tmp_r13 <= pc_o_valid_tmp_r12;
-      bram_wr_en_base    <= pc_o_valid_tmp_r13;
+      bram_wr_en         <= pc_o_valid_tmp_r13;
     end
   end
 
   always@(posedge clk) begin
-    pout_reg_base      <= pout[8];
-    bram_rd_data_base  <= bram_rd_data_tmp;
+    pout_reg        <= pout[8];
+    bram_rd_data_r  <= bram_rd_data_tmp;
   end
 end endgenerate
 
@@ -387,19 +379,19 @@ generate if (NUMBER_OF_REG == 2) begin : wr_en2
     if (rst) begin
       pc_o_valid_tmp_r13 <= 1'b0;
       pc_o_valid_tmp_r14 <= 1'b0;
-      bram_wr_en_base    <= 1'b0;
+      bram_wr_en         <= 1'b0;
     end else begin
       pc_o_valid_tmp_r13 <= pc_o_valid_tmp_r12;
       pc_o_valid_tmp_r14 <= pc_o_valid_tmp_r13;
-      bram_wr_en_base    <= pc_o_valid_tmp_r14;
+      bram_wr_en         <= pc_o_valid_tmp_r14;
     end
   end
 
   always@(posedge clk) begin
     pout_reg1       <= pout[8];
-    pout_reg_base   <= pout_reg1;
+    pout_reg        <= pout_reg1;
     bram_rd_data_r1 <= bram_rd_data_tmp;
-    bram_rd_data_base <= bram_rd_data_r1;
+    bram_rd_data_r  <= bram_rd_data_r1;
   end
 end endgenerate
 
@@ -409,36 +401,24 @@ generate if (NUMBER_OF_REG == 3) begin : wr_en3
       pc_o_valid_tmp_r13 <= 1'b0;
       pc_o_valid_tmp_r14 <= 1'b0;
       pc_o_valid_tmp_r15 <= 1'b0;
-      bram_wr_en_base    <= 1'b0;
+      bram_wr_en         <= 1'b0;
     end else begin
       pc_o_valid_tmp_r13 <= pc_o_valid_tmp_r12;
       pc_o_valid_tmp_r14 <= pc_o_valid_tmp_r13;
       pc_o_valid_tmp_r15 <= pc_o_valid_tmp_r14;
-      bram_wr_en_base    <= pc_o_valid_tmp_r15;
+      bram_wr_en         <= pc_o_valid_tmp_r15;
     end
   end
 
   always@(posedge clk) begin
     pout_reg1       <= pout[8];
     pout_reg2       <= pout_reg1;
-    pout_reg_base   <= pout_reg2;
+    pout_reg        <= pout_reg2;
     bram_rd_data_r1 <= bram_rd_data_tmp;
     bram_rd_data_r2 <= bram_rd_data_r1;
-    bram_rd_data_base <= bram_rd_data_r2;
+    bram_rd_data_r  <= bram_rd_data_r2;
   end
 end endgenerate
-
-always@(posedge clk) begin
-  if (rst) begin
-    bram_wr_en     <= 1'b0;
-    pout_reg       <= 8'd0;
-    bram_rd_data_r <= {M_W{1'b0}};
-  end else begin
-    bram_wr_en     <= bram_wr_en_base;
-    pout_reg       <= pout_reg_base;
-    bram_rd_data_r <= bram_rd_data_base;
-  end
-end
 
 ////////////////////////////////////////////////////////
 //internal rden and rdaddr
@@ -462,11 +442,21 @@ always@(posedge clk) begin
   end
 end
 
+wire [7:0] final_add_result;
+bram_adder #(.e(4), .m(3)) U_FINAL_ADD (
+   .clk   (clk                 ),
+   .a     (bram_rd_data_r[7:0] ),
+   .b     (pout_reg[7:0]       ),
+   .result(final_add_result    )
+);
 always@(posedge clk) begin
-//  bram_wr_data <= bram_rd_data_r + pout_reg[24:7]; 
-bram_wr_data <= bram_rd_data_r[7:0] + pout_reg[7:0]; 
-  //bram_wr_data <= bram_rd_data_r + pout_reg[15:0]; 
+   bram_wr_data  <= final_add_result;
 end
+// always@(posedge clk) begin
+// //  bram_wr_data <= bram_rd_data_r + pout_reg[24:7]; 
+// bram_wr_data <= bram_rd_data_r[7:0] + pout_reg[7:0]; 
+//   //bram_wr_data <= bram_rd_data_r + pout_reg[15:0]; 
+// end
 
 always@(posedge clk) begin
   if (rst) begin
@@ -501,48 +491,6 @@ assign Bin[5] = bram_data6r;
 assign Bin[6] = bram_data7r;
 assign Bin[7] = bram_data8r;
 assign Bin[8] = bram_data9r;
-
-genvar align_g;
-generate
-    for (align_g=0; align_g<MAC_CHAIN_LEN; align_g=align_g+1) begin : mac_input_align
-        if ((ADDER_PIPE_EXTRA * align_g) == 0) begin : no_extra_delay
-            assign Ain_mac[align_g] = Ain[align_g];
-            assign Bin_mac[align_g] = Bin[align_g];
-            assign ce_shift_mac[align_g] = ce_shift[align_g];
-        end else begin : extra_delay
-            localparam integer DELAY = ADDER_PIPE_EXTRA * align_g;
-            reg [7:0] ain_delay [0:DELAY-1];
-            reg [7:0] bin_delay [0:DELAY-1];
-            reg       ce_delay  [0:DELAY-1];
-            integer delay_idx;
-
-            always @(posedge clk) begin
-                if (rst) begin
-                    for (delay_idx = 0; delay_idx < DELAY; delay_idx = delay_idx + 1) begin
-                        ain_delay[delay_idx] <= 8'd0;
-                        bin_delay[delay_idx] <= 8'd0;
-                        ce_delay[delay_idx]  <= 1'b0;
-                    end
-                end else begin
-                    ain_delay[0] <= Ain[align_g];
-                    bin_delay[0] <= Bin[align_g];
-                    ce_delay[0]  <= ce_shift[align_g];
-
-                    for (delay_idx = 1; delay_idx < DELAY; delay_idx = delay_idx + 1) begin
-                        ain_delay[delay_idx] <= ain_delay[delay_idx-1];
-                        bin_delay[delay_idx] <= bin_delay[delay_idx-1];
-                        ce_delay[delay_idx]  <= ce_delay[delay_idx-1];
-                    end
-                end
-            end
-
-            assign Ain_mac[align_g] = ain_delay[DELAY-1];
-            assign Bin_mac[align_g] = bin_delay[DELAY-1];
-            assign ce_shift_mac[align_g] = ce_delay[DELAY-1];
-        end
-    end
-endgenerate
-
 // assign OPMODE[0] = {9'b000000101};
 // assign OPMODE[1] = {9'b000010101};
 // assign OPMODE[2] = {9'b000010101};
@@ -555,9 +503,9 @@ endgenerate
 
 genvar i;
 generate
-    for (i=0; i<8; i=i+1) begin : dsp_chain
+    for (i=0; i<=8; i=i+1) begin : dsp_chain
         if (i == 0) begin : first_fpmac
-            (* dont_touch = "true" *)fpmac #(
+            fpmac #(
                 .EXP_WIDTH(EXP_WIDTH),
                 .MANT_WIDTH(MANT_WIDTH),
                 .NUM_INREG(((i==0||i==3||i==6) ? 1 : 2))
@@ -565,17 +513,17 @@ generate
                 .clk(clk),
                 .rst_n(~rst),
                 .en(ce),
-                .en_1(ce_shift_mac[i]),
-                .en_2(ce_shift_mac[i]),
+                .en_1(ce_shift[i]),
+                .en_2(ce_shift[i]),
 
-                .mul_a(Ain_mac[i]),
-                .mul_b(Bin_mac[i]),
+                .mul_a(Ain[i]),
+                .mul_b(Bin[i]),
                 .sum_in(8'b0),
 
                 .acc_out(pout[i])
             );
         end else begin
-            (* dont_touch = "true" *)fpmac #(
+            fpmac #(
                 .EXP_WIDTH(EXP_WIDTH),
                 .MANT_WIDTH(MANT_WIDTH),
                 .NUM_INREG(((i==0||i==3||i==6) ? 1 : 2))
@@ -583,11 +531,11 @@ generate
                 .clk(clk),
                 .rst_n(~rst),
                 .en(ce),
-                .en_1(ce_shift_mac[i]),
-                .en_2(ce_shift_mac[i]),
+                .en_1(ce_shift[i]),
+                .en_2(ce_shift[i]),
 
-                .mul_a(Ain_mac[i]),
-                .mul_b(Bin_mac[i]),
+                .mul_a(Ain[i]),
+                .mul_b(Bin[i]),
                 .sum_in(pout[i-1]),
 
                 .acc_out(pout[i])
