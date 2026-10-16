@@ -116,14 +116,10 @@ source /opt/xilinx/2025.2/Vivado/settings64.sh
 export PYTHON_BIN=/path/to/python-with-torch
 make mvm  SEEDS="2026 2027" MVM_VECTORS=5
 make conv SEEDS="2026 2027" CONV_WIDTH=4 CONV_HEIGHT=6
-make postsim-mvm  SEEDS=2026 MVM_VECTORS=5 PERIOD=10
-make postsim-conv SEEDS=2026 CONV_WIDTH=4 CONV_HEIGHT=6 PERIOD=10
 make clean
 ```
 
-There are no default settings: a missing seed, size, period or `PYTHON_BIN`
-is an error. Test vectors are generated per run (and deleted after a passing
-run); `make clean` removes everything generated.
+Use `make help` for more information.
 
 ## License
 
