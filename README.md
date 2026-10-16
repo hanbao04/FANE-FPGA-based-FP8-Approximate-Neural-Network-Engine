@@ -19,7 +19,6 @@ FANE explores approximate FP8 arithmetic for neural-network acceleration on FPGA
 |   |-- fp8_mac/       # Standalone FP8 MAC RTL and legacy testbench
 |   `-- minimal_unit/ # Minimum-unit RTL experiments
 |-- sw/dist_sim/      # FP8 encoding, arithmetic and distribution simulation
-|-- website/          # Dataflow teaching visualization
 |-- Makefile          # Y=1 XSim entry points
 |-- LICENSE
 `-- README.md
