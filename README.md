@@ -14,76 +14,53 @@ FANE explores approximate FP8 arithmetic for neural-network acceleration on FPGA
 ```text
 .
 |-- hw/
-|   |-- fp8_mac/       # Standalone FP8 MAC RTL and testbench
-|   |-- mm/            # Matrix-multiplication RTL variants
-|   |   |-- v_paper/   # Paper version
-|   |   `-- v_opt/     # Optimized implementation (Fix the Bug of Addmul and mm)
-|   |-- conv/          # Convolution RTL and chip-level wrapper
-|   |   |-- v_paper/   # Paper version
-|   |   `-- v_opt/     # Optimized implementation (Fix the Bug of Addmul and conv)
-|   `-- fg_min_unit/   # Fine-grained/minimum-unit RTL experiments
-|-- sw/
-|   |-- main.py        # RMSE evaluation across FP8 formats and distributions
-|   |-- test.py        # Directed software tests and small demos
-|   `-- utils/         # FP8 codec, arithmetic models, data generation, and helpers
-|-- ChangLOG.md        # Project changelog
+|   |-- fane_opt/      # Optimized MVM/Conv RTL and Y=1 regression
+|   |-- fane_paper/    # Preserved paper-version RTL
+|   |-- fp8_mac/       # Standalone FP8 MAC RTL and legacy testbench
+|   `-- minimal_unit/ # Minimum-unit RTL experiments
+|-- sw/dist_sim/      # FP8 encoding, arithmetic and distribution simulation
+|-- website/          # Dataflow teaching visualization
+|-- Makefile          # Y=1 XSim entry points
 |-- LICENSE
 `-- README.md
 ```
 
 ## Software Model
 
-The Python model provides a bit-level and numerical reference for the approximate FP8 arithmetic flow used by the hardware design.
+The software package provides pure-PyTorch FP8/FANE arithmetic and numerical
+distribution simulation. FP8 values use raw bit patterns in `torch.uint8`
+tensors.
 
 ### Features
 
 - FP8 format support: `e2m5`, `e3m4`, `e4m3`, and `e5m2`
 - FP8 encoding and decoding utilities
-- Approximate multiplier and adder models
-- FP8 MAC and matrix-multiplication simulation
-- Random matrix generation for multiple input distributions
-- RMSE-based comparison against floating-point reference results
-- Repeated evaluation over matrix sizes and FP8 formats
+- FANE FP8 x FP8 -> FP8 approximate multiplication
+- Nine-term FP8 partial sums and FP8 result-memory accumulation with truncating alignment
+- Uniform, normal, Laplace, and Student-t distribution simulation
+- RMSE evaluation against FP32 matrix multiplication of quantized FP8 inputs
 
 ### Main Modules
 
 | Path | Description |
 | --- | --- |
-| `sw/utils/Decoder.py` | FP8 encode/decode utilities |
-| `sw/utils/Adder.py` | FP8 adder model |
-| `sw/utils/Multiplier.py` | Approximate multiplier model |
-| `sw/utils/top_matmul.py` | FP8 MAC and matrix-multiplication flow |
-| `sw/utils/data_gen.py` | Random input generation and matrix data path |
-| `sw/utils/error.py` | RMSE calculation utilities |
-| `sw/main.py` | Batch evaluation script |
-| `sw/test.py` | Directed functional tests and demos |
-
-### Supported Input Distributions
-
-The evaluation flow currently includes:
-
-- `uniform`
-- `normal`
-- `laplace`
-- `student_t`
+| `sw/dist_sim/fp8.py` | Pure-PyTorch RNE FP8 encoding and decoding |
+| `sw/dist_sim/fane.py` | Pure-PyTorch FANE multiply/add/dot/matmul |
+| `sw/dist_sim/validate.py` | Numerical-distribution accuracy evaluation |
+| `sw/dist_sim/tests/test_dist_sim.py` | FP8 codec and arithmetic tests |
 
 ### Running the Software Tests
 
-From the repository root:
+From the repository root, install the CPU build of PyTorch in a fresh Python
+environment, then install the remaining requirements and run the tests:
 
 ```bash
-cd sw
-python test.py
+python -m pip install "torch>=2.2" --index-url https://download.pytorch.org/whl/cpu
+python -m pip install -r sw/requirements.txt
+pytest -q sw/dist_sim/tests/test_dist_sim.py
 ```
 
-For the full evaluation flow:
-
-```bash
-cd sw
-python main.py
-```
-
-The main evaluation sweeps FP8 formats and input distributions, then reports RMSE statistics and confidence-interval data.
+See [`sw/README.md`](sw/README.md) for the operator semantics and examples.
 
 ## Hardware RTL
 
@@ -100,42 +77,54 @@ The hardware directory contains the RTL building blocks used to implement the FA
 
 ### Fine-Grained Minimum Unit
 
-`hw/fg_min_unit/` contains minimum RTL blocks with fine-grained design, including matrix-vector and convolution-oriented modules, constraints, adders, and FP8 data-path components.
+`hw/minimal_unit/` contains minimum RTL blocks with fine-grained design, including matrix-vector and convolution-oriented modules, constraints, adders, and FP8 data-path components.
 
 ### Matrix Multiplication
 
 | Path | Description |
 | --- | --- |
-| `hw/mm/v_paper/` | Reference matrix-multiplication RTL corresponding to the paper version |
-| `hw/mm/v_opt/` | Optimized matrix-multiplication RTL |
-| `hw/mm/v_opt(v_paper)/mm.v` | Core matrix-multiplication engine |
-| `hw/mm/v_opt(v_paper)/mm_top.v` | Top-level matrix-multiplication control and memory integration |
-| `hw/mm/v_opt(v_paper)/mm_chip.sv` | Chip-style wrapper for the matrix-multiplication unit |
-| `hw/mm/v_opt(v_paper)/fpmac_mm.v` | Pipeline-compatible FP8 MAC wrapper |
+| `hw/fane_paper/mm/v_paper/` | Reference matrix-multiplication RTL corresponding to the paper version |
+| `hw/fane_opt/mm/v_opt/` | Optimized matrix-multiplication RTL |
+| `hw/fane_opt/mm/v_opt/mm.v` | Core matrix-multiplication engine |
+| `hw/fane_opt/mm/v_opt/mm_top.v` | Top-level matrix-multiplication control and memory integration |
+| `hw/fane_opt/mm/v_opt/mm_chip.sv` | Chip-style wrapper for the matrix-multiplication unit |
+| `hw/fane_opt/mm/v_opt/fpmac_mm.v` | Pipeline-compatible FP8 MAC wrapper |
 
 ### Convolution
 
 | Path | Description |
 | --- | --- |
-| `hw/conv/v_paper/` | Reference convolution RTL corresponding to the paper version |
-| `hw/conv/v_opt/` | Optimized convolution RTL |
-| `hw/conv/v_opt(v_paper)/conv.v` | Core convolution engine |
-| `hw/conv/v_opt(v_paper)/conv_top.v` | Top-level convolution control and memory integration |
-| `hw/conv/v_opt(v_paper)/conv_chip.sv` | Chip-style wrapper for the convolution unit |
-| `hw/conv/v_opt(v_paper)/fpmac_conv.v` | Pipeline-compatible FP8 MAC wrapper |
+| `hw/fane_paper/conv/v_paper/` | Reference convolution RTL corresponding to the paper version |
+| `hw/fane_opt/conv/v_opt/` | Optimized convolution RTL |
+| `hw/fane_opt/conv/v_opt/conv.v` | Core convolution engine |
+| `hw/fane_opt/conv/v_opt/conv_top.v` | Top-level convolution control and memory integration |
+| `hw/fane_opt/conv/v_opt/conv_chip.sv` | Chip-style wrapper for the convolution unit |
+| `hw/fane_opt/conv/v_opt/fpmac_conv.v` | Pipeline-compatible FP8 MAC wrapper |
 
 
 ## Power Evaluation
 
 Power results are derived using **PDM tool v2025.2**.
 
-## Notes on Recent Fixes
+## Min.hardware simulation (New)
 
-Recent fixes are documented in [`ChangLOG.md`](ChangLOG.md). In particular, the add-multiply, matrix-multiplication, and convolution paths were updated to handle edge cases correctly:
+The `hw/fane_opt/sim` regression validates the complete Y=1 chip wrappers,
+including URAM/BRAM paths, address generation, controller timing, every valid
+output row, and changed second-pass FP8 accumulation onto nonzero result RAM. Source Vivado first, then use the root Makefile:
 
-- Edge-case output is now `0` instead of the previous two's-complement-style representation.
-- Related hardware logic was updated from `LUT2` to `LUT3`.
-- The addition before BRAM was corrected to use an FP adder instead of an integer adder.
+```bash
+source /opt/xilinx/2025.2/Vivado/settings64.sh
+export PYTHON_BIN=/path/to/python-with-torch
+make mvm  SEEDS="2026 2027" MVM_VECTORS=5
+make conv SEEDS="2026 2027" CONV_WIDTH=4 CONV_HEIGHT=6
+make postsim-mvm  SEEDS=2026 MVM_VECTORS=5 PERIOD=10
+make postsim-conv SEEDS=2026 CONV_WIDTH=4 CONV_HEIGHT=6 PERIOD=10
+make clean
+```
+
+There are no default settings: a missing seed, size, period or `PYTHON_BIN`
+is an error. Test vectors are generated per run (and deleted after a passing
+run); `make clean` removes everything generated.
 
 ## License
 
